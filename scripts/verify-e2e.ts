@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   buildReport,
-  categorize,
   parseTransactionsFromText,
   demoTransactions,
 } from "../src/lib/finance-engine";

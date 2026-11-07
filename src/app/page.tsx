@@ -85,7 +85,6 @@ function formatCurrency(val: number): string {
 }
 
 export default function Home() {
-  const [files, setFiles] = useState<File[]>([]);
   const [report, setReport] = useState<InsightReport | null>(null);
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -118,7 +117,6 @@ export default function Home() {
   });
 
   // Chatbot State
-  const [chatOpen, setChatOpen] = useState(false);
   const [question, setQuestion] = useState("");
   const [isChatting, setIsChatting] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -859,6 +857,21 @@ export default function Home() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
+                      {/* Category select */}
+                      <select
+                        aria-label="Filter by category"
+                        value={selectedCategory}
+                        onChange={(e) => setSelectedCategory(e.target.value)}
+                        className="rounded-lg border border-white/10 bg-zinc-900 px-2.5 py-1 text-xs font-semibold text-zinc-300 focus:outline-none"
+                      >
+                        <option value="All">All Categories</option>
+                        {activeReport?.categories.map((c) => (
+                          <option key={c.name} value={c.name}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+
                       {/* Type filter */}
                       {(["All", "income", "expense", "transfer"] as const).map((t) => (
                         <button
@@ -879,12 +892,16 @@ export default function Home() {
                       <button
                         type="button"
                         onClick={() => {
-                          if (sortField === "date") setSortField("amount");
-                          else setSortField("date");
+                          if (sortField === "date") {
+                            setSortField("amount");
+                          } else {
+                            setSortField("date");
+                            setSortOrder(sortOrder === "desc" ? "asc" : "desc");
+                          }
                         }}
-                        className="rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-xs text-zinc-300"
+                        className="rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-xs text-zinc-300 hover:bg-white/10"
                       >
-                        Sort: {sortField === "date" ? "Date" : "Amount"}
+                        Sort: {sortField === "date" ? `Date (${sortOrder.toUpperCase()})` : `Amount (${sortOrder.toUpperCase()})`}
                       </button>
                     </div>
                   </div>
