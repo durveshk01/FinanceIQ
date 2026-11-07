@@ -1,0 +1,181 @@
+@import "tailwindcss";
+
+:root {
+  --background: #000000;
+  --foreground: #ffffff;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #000000;
+    --foreground: #ffffff;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+::selection {
+  background: #e50914;
+  color: #ffffff;
+}
+
+@layer components {
+  .premium-card {
+    position: relative;
+    overflow: hidden;
+    border-radius: 28px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025)),
+      rgba(255, 255, 255, 0.05);
+    box-shadow: 0 22px 80px rgba(0, 0, 0, 0.48);
+    backdrop-filter: blur(24px);
+    transition: border-color 220ms ease, box-shadow 220ms ease, background 220ms ease;
+  }
+
+  .premium-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(circle at 20% 0%, rgba(229, 9, 20, 0.18), transparent 36%);
+    opacity: 0;
+    transition: opacity 220ms ease;
+  }
+
+  .premium-card:hover {
+    border-color: rgba(255, 59, 59, 0.45);
+    box-shadow: 0 26px 95px rgba(229, 9, 20, 0.22), 0 22px 80px rgba(0, 0, 0, 0.52);
+  }
+
+  .premium-card:hover::before {
+    opacity: 1;
+  }
+
+  .premium-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #e50914, #ff3b3b);
+    padding: 0.75rem 1.25rem;
+    font-weight: 900;
+    color: #ffffff;
+    box-shadow: 0 0 38px rgba(229, 9, 20, 0.42);
+    transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+  }
+
+  .premium-button:hover {
+    transform: translateY(-1px) scale(1.025);
+    box-shadow: 0 0 58px rgba(229, 9, 20, 0.65);
+    filter: saturate(1.12);
+  }
+
+  .premium-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .secondary-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.08);
+    padding: 0.75rem 1.25rem;
+    font-weight: 900;
+    color: #ffffff;
+    backdrop-filter: blur(18px);
+    transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background 180ms ease;
+  }
+
+  .secondary-button:hover {
+    transform: translateY(-1px) scale(1.02);
+    border-color: rgba(255, 59, 59, 0.58);
+    background: rgba(229, 9, 20, 0.16);
+    box-shadow: 0 0 36px rgba(229, 9, 20, 0.24);
+  }
+
+  .secondary-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .focus-visible-ring {
+    outline: none;
+  }
+
+  .focus-visible-ring:focus-visible,
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  summary:focus-visible {
+    outline: 2px solid #ff3b3b;
+    outline-offset: 3px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(229, 9, 20, 0.55);
+    border-radius: 999px;
+  }
+
+  .scrollbar-horizontal::-webkit-scrollbar {
+    height: 8px;
+  }
+
+  .scrollbar-horizontal::-webkit-scrollbar-thumb {
+    background: rgba(229, 9, 20, 0.55);
+    border-radius: 999px;
+  }
+
+  @media (max-width: 640px) {
+    .premium-card {
+      border-radius: 22px;
+      backdrop-filter: blur(14px);
+    }
+
+    .premium-button,
+    .secondary-button {
+      width: 100%;
+      min-height: 48px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

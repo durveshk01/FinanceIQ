@@ -1,0 +1,48 @@
+{
+  "name": "financeiq",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "tsx src/lib/finance-engine.test.ts",
+    "test:e2e": "tsx scripts/verify-e2e.ts",
+    "test:all": "tsx src/lib/finance-engine.test.ts && tsx scripts/verify-e2e.ts && cd render-backend && npm test && cd ..",
+    "build:android": "npx cap sync android && cd android && .\\gradlew.bat assembleDebug && cd ..",
+    "start:backend": "cd render-backend && npm start"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/cli": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
+    "exceljs": "^4.4.0",
+    "framer-motion": "^12.23.26",
+    "lucide-react": "^0.562.0",
+    "next": "16.2.7",
+    "openai": "^6.10.0",
+    "pdf-parse": "^2.4.5",
+    "pdfkit": "^0.19.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "recharts": "^3.6.0",
+    "tesseract.js": "^7.0.0",
+    "zod": "^4.4.3"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/pdfkit": "^0.17.6",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.7",
+    "tailwindcss": "^4",
+    "tsx": "^4.21.0",
+    "typescript": "^5"
+  }
+}
