@@ -64,6 +64,16 @@ export class DeviceStatementProcessor {
 
     onProgress?.("Running financial intelligence & categorization...", 75);
     const userRules = LocalFinanceDatabase.getUserRules();
+    if (userRules.length > 0) {
+      for (const t of sanitizedTxns) {
+        const matchingRule = userRules.find(r => 
+          r.pattern && new RegExp(r.pattern, "i").test(t.description)
+        );
+        if (matchingRule) {
+          t.category = matchingRule.category;
+        }
+      }
+    }
     const report = buildReport(sanitizedTxns, { fileNames });
 
     onProgress?.("Calculating health score & forecast on device...", 90);

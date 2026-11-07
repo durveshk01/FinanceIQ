@@ -2,10 +2,8 @@ import {
   type InsightReport,
   type Transaction,
   type Subscription,
-  type HealthScore,
-  type Forecasting,
 } from "./schemas";
-import { categorizeTransaction, extractMerchant, cleanDescription, CATEGORIES } from "./categorizer";
+import { categorizeTransaction, extractMerchant } from "./categorizer";
 import { parseGenericBankText, parseCsvRows, parseStructuredTable } from "./bank-parsers";
 import { detectRecurringSubscriptions } from "./subscriptions";
 import { calculateFinancialHealthScore } from "./health-score";

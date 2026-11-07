@@ -1,4 +1,4 @@
-package com.financeiq.app;
+package com.durvesh.financeiq;
 
 import com.getcapacitor.BridgeActivity;
 

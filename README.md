@@ -2,12 +2,37 @@
 
 > **Production-grade personal finance command center featuring 100% on-device statement processing, native Android mobile application, lightweight Render cloud synchronization, Vercel web application, and deterministic financial intelligence.**
 
-[![Build Status](https://img.shields.io/badge/Next.js-16.2.7-black?logo=next.js)](https://nextjs.org)
-[![Android](https://img.shields.io/badge/Android-APK%20Ready-green?logo=android)](https://developer.android.com)
+[![GitHub Release](https://img.shields.io/github/v/release/durveshk01/FinanceIQ?color=green&label=Android%20APK%20Release)](https://github.com/durveshk01/FinanceIQ/releases/tag/v1.0.0)
+[![Next.js](https://img.shields.io/badge/Next.js-16.2.7-black?logo=next.js)](https://nextjs.org)
+[![Android](https://img.shields.io/badge/Android-APK%20v1.0.0-green?logo=android)](https://github.com/durveshk01/FinanceIQ/releases/download/v1.0.0/FinanceIQ-release.apk)
 [![Render](https://img.shields.io/badge/Render-Backend%20Ready-46E3B7?logo=render)](https://render.com)
 [![Vercel](https://img.shields.io/badge/Vercel-Deployment%20Ready-white?logo=vercel)](https://vercel.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
+
+---
+
+## 📱 Android APK Release (v1.0.0)
+
+Download the official standalone Android application directly from the **[GitHub Releases Page](https://github.com/durveshk01/FinanceIQ/releases/tag/v1.0.0)**.
+
+- **Direct APK Download**: [**FinanceIQ-release.apk**](https://github.com/durveshk01/FinanceIQ/releases/download/v1.0.0/FinanceIQ-release.apk)
+- **Application Name**: FinanceIQ
+- **Package ID**: `com.durvesh.financeiq`
+- **Version**: `1.0.0` (Version Code: `1`)
+- **File Size**: ~3.69 MB (`3,870,718 bytes`)
+- **Compatibility**: Android 7.0 (API Level 24) through Android 14/15 (API Level 34+)
+- **SHA-256 Checksum**:
+  ```text
+  D47E8EE3FD99B030912291238ABD43C59DA192EB80CFE39064C239515D812EB5
+  ```
+
+### 📲 How to Install on Android
+1. Download **[FinanceIQ-release.apk](https://github.com/durveshk01/FinanceIQ/releases/download/v1.0.0/FinanceIQ-release.apk)** to your Android smartphone or tablet.
+2. Tap the downloaded file in your notification bar or file manager.
+3. If prompted by Android, enable **"Allow from this source"** in your device settings.
+4. Tap **Install** and open **FinanceIQ**.
+5. Works 100% offline out-of-the-box — no internet connection or mandatory login required.
 
 ---
 

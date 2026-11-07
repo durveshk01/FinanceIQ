@@ -45,6 +45,7 @@ next-env.d.ts
 .vercel
 
 # Android Build Outputs
+*.apk
 android/app/build/
 android/.gradle/
 android/local.properties

@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: "com.financeiq.app",
+  appId: "com.durvesh.financeiq",
   appName: "FinanceIQ",
   webDir: "out",
   server: {

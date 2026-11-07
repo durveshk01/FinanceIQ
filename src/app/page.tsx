@@ -1,55 +1,34 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { AnimatePresence, MotionConfig, motion, useMotionValue, useReducedMotion, useSpring } from "framer-motion";
+import { MotionConfig, useReducedMotion } from "framer-motion";
 import {
   AlertTriangle,
-  ArrowRight,
   Bot,
   Brain,
-  CalendarDays,
   CheckCircle2,
-  ChevronRight,
   Database,
   Download,
-  Edit2,
   FileSpreadsheet,
   FileText,
-  Filter,
-  Fingerprint,
-  HelpCircle,
   Landmark,
   LineChart,
-  Lock,
-  MessageCircle,
-  PiggyBank,
   Play,
-  Plus,
   RefreshCw,
   Search,
-  Share2,
   ShieldCheck,
-  Sliders,
   Smartphone,
   Sparkles,
-  Target,
-  Trash2,
-  TrendingDown,
   TrendingUp,
   UploadCloud,
   WalletCards,
-  X,
 } from "lucide-react";
 
 import {
   buildReport,
   demoTransactions,
   type InsightReport,
-  type Transaction,
-  type Subscription,
-  type FinancialGoal,
-  type SimulationResult,
 } from "@/lib/finance-engine";
 import { DeviceStatementProcessor } from "@/lib/device-processor";
 import { LocalFinanceDatabase, type UserPreferences } from "@/lib/local-storage";
@@ -160,12 +139,15 @@ export default function Home() {
 
   // Load saved local data on boot
   useEffect(() => {
-    setChartsReady(true);
-    const saved = LocalFinanceDatabase.getActiveReport();
-    if (saved) {
-      setReport(saved);
-      setIsDemoMode(false);
-    }
+    const timer = setTimeout(() => {
+      setChartsReady(true);
+      const saved = LocalFinanceDatabase.getActiveReport();
+      if (saved) {
+        setReport(saved);
+        setIsDemoMode(false);
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   const activeReport = report;
@@ -256,8 +238,9 @@ export default function Home() {
         setActiveTab("Overview");
         scrollToDashboard();
       }
-    } catch (err: any) {
-      setError(err.message || "Could not extract transactions from file. Please ensure file contains valid bank transactions.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Could not extract transactions from file. Please ensure file contains valid bank transactions.";
+      setError(msg);
     } finally {
       setIsAnalyzing(false);
       setAnalysisProgress({ step: "Complete", percentage: 100 });
@@ -338,8 +321,9 @@ export default function Home() {
       }
       setExportFeedback(`Successfully generated ${format.toUpperCase()} report!`);
       setTimeout(() => setExportFeedback(null), 4000);
-    } catch (err: any) {
-      setExportFeedback(`Export failed: ${err.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setExportFeedback(`Export failed: ${msg}`);
     } finally {
       setExporting(null);
     }
@@ -400,9 +384,10 @@ export default function Home() {
       const data = await res.json();
       setSyncStatus("synced");
       setSyncFeedback(`Cloud Sync successful! Synced ${data.savedCount} entities to Render at ${new Date().toLocaleTimeString()}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
       setSyncStatus("offline");
-      setSyncFeedback(`Sync failed or backend unreachable: ${err.message}`);
+      setSyncFeedback(`Sync failed or backend unreachable: ${msg}`);
     }
   }
 
@@ -1532,6 +1517,6 @@ export default function Home() {
   );
 }
 
-function HeartPulse(props: any) {
+function HeartPulse(props: React.ComponentProps<typeof Brain>) {
   return <Brain {...props} />;
 }

@@ -69,7 +69,7 @@ export function normalizeDateString(raw: string): string {
   // Handle DD/MM/YYYY or MM/DD/YYYY or DD-MM-YYYY
   const parts = trimmed.split(/[/.-]/).map(p => p.trim());
   if (parts.length >= 3) {
-    let [p1, p2, p3] = parts;
+    const [p1, p2, p3] = parts;
     if (p1.length === 4) {
       // YYYY/MM/DD
       return `${p1}-${p2.padStart(2, "0")}-${p3.padStart(2, "0")}`;

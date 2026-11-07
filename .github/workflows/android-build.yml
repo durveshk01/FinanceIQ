@@ -1,0 +1,78 @@
+name: Build & Release FinanceIQ Android APK
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: "17"
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install Root Dependencies
+        run: npm ci
+
+      - name: Run FinanceIQ Test Suite
+        run: npm run test:all
+
+      - name: Build Static Web App for Capacitor
+        run: node scripts/build-export.js
+
+      - name: Sync Capacitor Android Project
+        run: npx cap sync android
+
+      - name: Make Gradlew Executable
+        run: chmod +x android/gradlew
+
+      - name: Build Release APK with Gradle
+        run: |
+          cd android
+          ./gradlew assembleRelease
+          cd ..
+
+      - name: Prepare Release APK Artifact
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk FinanceIQ-release.apk
+          sha256sum FinanceIQ-release.apk > FinanceIQ-release.apk.sha256
+          echo "SHA256: $(cat FinanceIQ-release.apk.sha256)"
+
+      - name: Upload APK as Workflow Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FinanceIQ-release-apk
+          path: FinanceIQ-release.apk
+          if-no-files-found: error
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          name: "FinanceIQ Android ${{ github.ref_name }}"
+          tag_name: ${{ github.ref_name }}
+          files: |
+            FinanceIQ-release.apk
+            FinanceIQ-release.apk.sha256
+          draft: false
+          prerelease: false
+          generate_release_notes: true
