@@ -453,7 +453,6 @@ export default function Home() {
           onChange={(e) => {
             if (e.target.files && e.target.files.length > 0) {
               const filesArr = Array.from(e.target.files);
-              setFiles(filesArr);
               handleFileProcess(filesArr);
             }
           }}
@@ -581,7 +580,7 @@ export default function Home() {
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setChatOpen(true)}
+                    onClick={() => setActiveTab("AI Coach")}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-bold text-rose-300 hover:bg-rose-500/20"
                   >
                     <Bot size={15} /> AI Coach

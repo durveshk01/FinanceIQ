@@ -18,20 +18,23 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
           distribution: "zulu"
-          java-version: "17"
+          java-version: "21"
 
-      - name: Set up Node.js 20
+      - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: Install Root Dependencies
         run: npm ci
+
+      - name: Install Render Backend Dependencies
+        run: npm --prefix render-backend ci
 
       - name: Run FinanceIQ Test Suite
         run: npm run test:all
@@ -54,25 +57,33 @@ jobs:
       - name: Prepare Release APK Artifact
         run: |
           cp android/app/build/outputs/apk/release/app-release.apk FinanceIQ-release.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk FinanceIQ-debug.apk
           sha256sum FinanceIQ-release.apk > FinanceIQ-release.apk.sha256
-          echo "SHA256: $(cat FinanceIQ-release.apk.sha256)"
+          sha256sum FinanceIQ-debug.apk > FinanceIQ-debug.apk.sha256
+          echo "Release SHA256: $(cat FinanceIQ-release.apk.sha256)"
 
-      - name: Upload APK as Workflow Artifact
+      - name: Upload APKs as Workflow Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: FinanceIQ-release-apk
-          path: FinanceIQ-release.apk
+          name: FinanceIQ-apks
+          path: |
+            FinanceIQ-release.apk
+            FinanceIQ-debug.apk
+            FinanceIQ-release.apk.sha256
+            FinanceIQ-debug.apk.sha256
           if-no-files-found: error
 
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          name: "FinanceIQ Android ${{ github.ref_name }}"
+          name: "FinanceIQ v${{ github.ref_name }}"
           tag_name: ${{ github.ref_name }}
           files: |
             FinanceIQ-release.apk
+            FinanceIQ-debug.apk
             FinanceIQ-release.apk.sha256
+            FinanceIQ-debug.apk.sha256
           draft: false
           prerelease: false
           generate_release_notes: true

@@ -8,9 +8,10 @@
     "build:export": "node scripts/build-export.js",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "test": "tsx src/lib/finance-engine.test.ts",
     "test:e2e": "tsx scripts/verify-e2e.ts",
-    "test:all": "tsx src/lib/finance-engine.test.ts && tsx scripts/verify-e2e.ts && cd render-backend && npm test && cd ..",
+    "test:all": "tsx src/lib/finance-engine.test.ts && tsx scripts/verify-e2e.ts && npm --prefix render-backend test",
     "build:android": "node scripts/build-export.js && npx cap sync android && cd android && .\\gradlew.bat assembleRelease && cd ..",
     "start:backend": "cd render-backend && npm start"
   },
