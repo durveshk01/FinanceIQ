@@ -6,12 +6,13 @@ const config: CapacitorConfig = {
   webDir: "out",
   server: {
     androidScheme: "https",
-    cleartext: true,
+    cleartext: false,
+    errorPath: "unsupported-webview.html",
   },
   android: {
-    allowMixedContent: true,
+    allowMixedContent: false,
     captureInput: true,
-    webContentsDebuggingEnabled: true,
+    minWebViewVersion: 111,
   },
 };
 

@@ -2,17 +2,28 @@ import {
   type InsightReport,
   type Transaction,
   type Subscription,
+  type FinancialGoal,
 } from "./schemas";
 import { categorizeTransaction, extractMerchant } from "./categorizer";
-import { parseGenericBankText, parseCsvRows, parseStructuredTable } from "./bank-parsers";
+import {
+  parseGenericBankText,
+  parseCsvRows,
+  parseStructuredTable,
+} from "./bank-parsers";
 import { detectRecurringSubscriptions } from "./subscriptions";
 import { calculateFinancialHealthScore } from "./health-score";
 import { generateFinancialForecast } from "./forecasting";
 import { generateDefaultGoals, runSpendingSimulation } from "./goal-planner";
+import { roundMoney, sumMoney } from "./money";
+import { transactionSchema, financialGoalSchema } from "./schemas";
 
 export * from "./schemas";
 export { categorizeTransaction, extractMerchant } from "./categorizer";
-export { parseGenericBankText, parseCsvRows, parseStructuredTable } from "./bank-parsers";
+export {
+  parseGenericBankText,
+  parseCsvRows,
+  parseStructuredTable,
+} from "./bank-parsers";
 
 // Backward-compatible categorization function
 export function categorize(description: string, amount: number): string {
@@ -29,11 +40,14 @@ export function merchantFromDescription(description: string): string {
   return extractMerchant(description);
 }
 
-export function parseTransactionsFromText(text: string, filename = "statement.txt"): Transaction[] {
+export function parseTransactionsFromText(
+  text: string,
+  filename = "statement.txt",
+): Transaction[] {
   // Check if text appears to be CSV format
-  if (text.includes(",") || text.includes(";") || text.includes("\t")) {
+  if (/[,;\t|]/.test(text)) {
     const rows = parseCsvRows(text);
-    if (rows.length > 2) {
+    if (rows.length >= 2) {
       const parsed = parseStructuredTable(rows, filename);
       if (parsed.transactions.length > 0) {
         return parsed.transactions;
@@ -68,22 +82,39 @@ export function demoTransactions(): Transaction[] {
     ["Zerodha Stock Demat Investment", -10000, "Investments", "expense"],
   ] as const;
 
-  const today = new Date();
+  const now = new Date();
+  const today = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
   const txns: Transaction[] = [];
 
   for (let i = 0; i < 90; i++) {
-    const item = merchants[i % merchants.length];
-    const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
+    const date = new Date(today.getTime() - (89 - i) * 86400000);
+    const day = date.getUTCDate();
+    // Salary and subscriptions follow calendar-month cadences in the demo.
+    const expenseMerchants = merchants.filter(
+      (m) =>
+        !["Salary", "Entertainment"].includes(m[2]) || /BookMyShow/.test(m[0]),
+    );
+    const item =
+      day === 1
+        ? merchants[0]
+        : day === 5
+          ? merchants[3]
+          : day === 7
+            ? merchants[16]
+            : expenseMerchants[i % expenseMerchants.length];
     const dateString = date.toISOString().slice(0, 10);
 
     const baseAmt = item[1];
     // Add realistic variation
-    const variation = baseAmt < 0
-      ? -(Math.round(Math.abs(baseAmt) * (0.85 + ((i % 7) * 0.05))))
-      : baseAmt;
+    const variation =
+      baseAmt < 0 && !/Netflix|Spotify/.test(item[0])
+        ? -Math.round(Math.abs(baseAmt) * (0.85 + (i % 7) * 0.05))
+        : baseAmt;
 
     const isExpense = variation < 0;
-    const cat = item[2];
+    const cat = categorizeTransaction(item[0], variation).category;
 
     txns.push({
       id: `demo_${i}_${Date.now().toString(36)}`,
@@ -96,10 +127,10 @@ export function demoTransactions(): Transaction[] {
       type: isExpense ? "expense" : "income",
       category: cat,
       subcategory: "Demo",
-      paymentMethod: i % 3 === 0 ? "UPI" : i % 3 === 1 ? "Debit Card" : "Net Banking",
+      paymentMethod:
+        i % 3 === 0 ? "UPI" : i % 3 === 1 ? "Debit Card" : "Net Banking",
       account: "Primary Checking",
       reference: `REF${100000 + i}`,
-      runningBalance: 120000 + (variation * (i + 1)),
       importSource: "demo-dataset",
       confidence: 0.95,
       isReviewed: true,
@@ -108,42 +139,70 @@ export function demoTransactions(): Transaction[] {
     });
   }
 
-  return txns.sort((a, b) => a.date.localeCompare(b.date));
+  let balance = 120000;
+  for (const transaction of txns) {
+    balance = roundMoney(balance + transaction.amount);
+    transaction.runningBalance = balance;
+  }
+  return txns;
 }
 
-export function buildReport(transactions: Transaction[], metadata?: { fileNames?: string[] }): InsightReport {
-  const activeTxns = transactions.filter(t => !t.isExcluded);
+export type ReportMetadata = {
+  fileNames?: string[];
+  duplicatesRemoved?: number;
+  openingBalance?: number;
+  closingBalance?: number;
+  goals?: FinancialGoal[];
+};
+
+export function buildReport(
+  transactions: Transaction[],
+  metadata?: ReportMetadata,
+): InsightReport {
+  const verifiedTxns = transactions
+    .map((t) => transactionSchema.parse(t))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const activeTxns = verifiedTxns.filter((t) => !t.isExcluded);
 
   // Decimal-safe sum
-  const expenses = activeTxns
-    .filter(t => t.type === "expense")
-    .reduce((acc, t) => acc + Math.abs(t.amount), 0);
+  const expenses = sumMoney(
+    activeTxns
+      .filter((t) => t.type === "expense")
+      .map((t) => Math.abs(t.amount)),
+  );
 
-  const income = activeTxns
-    .filter(t => t.type === "income")
-    .reduce((acc, t) => acc + Math.abs(t.amount), 0);
+  const income = sumMoney(
+    activeTxns
+      .filter((t) => t.type === "income")
+      .map((t) => Math.abs(t.amount)),
+  );
 
-  const transfers = activeTxns
-    .filter(t => t.type === "transfer")
-    .reduce((acc, t) => acc + Math.abs(t.amount), 0);
+  const transfers = sumMoney(
+    activeTxns
+      .filter((t) => t.type === "transfer")
+      .map((t) => Math.abs(t.amount)),
+  );
 
-  const netSavings = income - expenses;
+  const netSavings = roundMoney(income - expenses);
   const savingsRate = income > 0 ? Math.round((netSavings / income) * 100) : 0;
 
   // Calculate unique days and date range
-  const dates = [...new Set(activeTxns.map(t => t.date))].sort();
+  const dates = [...new Set(verifiedTxns.map((t) => t.date))].sort();
   const startDate = dates[0] || new Date().toISOString().slice(0, 10);
   const endDate = dates[dates.length - 1] || startDate;
   const startMs = new Date(startDate).getTime();
   const endMs = new Date(endDate).getTime();
-  const periodDays = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)) + 1);
+  const periodDays = Math.max(
+    1,
+    Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)) + 1,
+  );
 
   // Group by category
   const catTotals = new Map<string, { amount: number; count: number }>();
-  for (const t of activeTxns.filter(t => t.type === "expense")) {
+  for (const t of activeTxns.filter((t) => t.type === "expense")) {
     const cur = catTotals.get(t.category) || { amount: 0, count: 0 };
     catTotals.set(t.category, {
-      amount: cur.amount + Math.abs(t.amount),
+      amount: roundMoney(cur.amount + Math.abs(t.amount)),
       count: cur.count + 1,
     });
   }
@@ -151,7 +210,7 @@ export function buildReport(transactions: Transaction[], metadata?: { fileNames?
   const categories = [...catTotals.entries()]
     .map(([name, val]) => ({
       name,
-      amount: Math.round(val.amount),
+      amount: val.amount,
       percent: expenses > 0 ? Math.round((val.amount / expenses) * 100) : 0,
       transactionCount: val.count,
     }))
@@ -159,10 +218,10 @@ export function buildReport(transactions: Transaction[], metadata?: { fileNames?
 
   // Group by top merchants
   const merchantTotals = new Map<string, { amount: number; count: number }>();
-  for (const t of activeTxns.filter(t => t.type === "expense")) {
+  for (const t of activeTxns.filter((t) => t.type === "expense")) {
     const cur = merchantTotals.get(t.merchant) || { amount: 0, count: 0 };
     merchantTotals.set(t.merchant, {
-      amount: cur.amount + Math.abs(t.amount),
+      amount: roundMoney(cur.amount + Math.abs(t.amount)),
       count: cur.count + 1,
     });
   }
@@ -170,7 +229,7 @@ export function buildReport(transactions: Transaction[], metadata?: { fileNames?
   const merchants = [...merchantTotals.entries()]
     .map(([merchant, val]) => ({
       merchant,
-      amount: Math.round(val.amount),
+      amount: val.amount,
       transactions: val.count,
     }))
     .sort((a, b) => b.amount - a.amount)
@@ -181,34 +240,60 @@ export function buildReport(transactions: Transaction[], metadata?: { fileNames?
 
   // Weekend vs Weekday analysis
   const weekendVsWeekday = activeTxns
-    .filter(t => t.type === "expense")
+    .filter((t) => t.type === "expense")
     .reduce(
       (acc, t) => {
         const d = new Date(`${t.date}T00:00:00.000Z`).getUTCDay();
-        if (d === 0 || d === 6) acc.weekend += Math.abs(t.amount);
-        else acc.weekday += Math.abs(t.amount);
+        if (d === 0 || d === 6)
+          acc.weekend = roundMoney(acc.weekend + Math.abs(t.amount));
+        else acc.weekday = roundMoney(acc.weekday + Math.abs(t.amount));
         return acc;
       },
       { weekend: 0, weekday: 0 },
     );
 
   // Fixed and debt expenses for health score
-  const fixedCategories = new Set(["Housing", "Utilities", "Insurance", "Fuel", "Groceries"]);
+  const fixedCategories = new Set([
+    "Housing",
+    "Utilities",
+    "Insurance",
+    "Fuel",
+    "Groceries",
+  ]);
   const fixedExpenses = categories
-    .filter(c => fixedCategories.has(c.name))
+    .filter((c) => fixedCategories.has(c.name))
     .reduce((acc, c) => acc + c.amount, 0);
 
   const debtExpenses = categories
-    .filter(c => c.name === "EMI & Loans" || c.name === "Debt")
+    .filter((c) => c.name === "EMI & Loans" || c.name === "Debt")
     .reduce((acc, c) => acc + c.amount, 0);
 
   // Observed vs Calculated Balances
-  const txnsWithBalance = activeTxns.filter(t => t.runningBalance !== undefined);
-  const observedOpening = txnsWithBalance.length > 0 ? txnsWithBalance[0].runningBalance : undefined;
-  const observedClosing = txnsWithBalance.length > 0 ? txnsWithBalance[txnsWithBalance.length - 1].runningBalance : undefined;
-
-  const openingAmount = observedOpening ?? 100000;
-  const calculatedClosing = openingAmount + netSavings;
+  const firstBalanceIndex = verifiedTxns.findIndex(
+    (t) => t.runningBalance !== undefined,
+  );
+  const txnsWithBalance = verifiedTxns.filter(
+    (t) => t.runningBalance !== undefined,
+  );
+  const observedOpening = metadata?.openingBalance;
+  const inferredOpening =
+    firstBalanceIndex >= 0
+      ? roundMoney(
+          verifiedTxns[firstBalanceIndex].runningBalance! -
+            sumMoney(
+              verifiedTxns.slice(0, firstBalanceIndex + 1).map((t) => t.amount),
+            ),
+        )
+      : undefined;
+  const observedClosing =
+    metadata?.closingBalance ??
+    txnsWithBalance[txnsWithBalance.length - 1]?.runningBalance;
+  const openingAmount = observedOpening ?? inferredOpening ?? 0;
+  // Transfers move the balance of this account even when they are excluded
+  // from spending. Exclusion changes analysis, not observed bank movements.
+  const calculatedClosing = roundMoney(
+    openingAmount + sumMoney(verifiedTxns.map((t) => t.amount)),
+  );
   const closingAmount = observedClosing ?? calculatedClosing;
 
   // Calculate Health Score
@@ -226,15 +311,31 @@ export function buildReport(transactions: Transaction[], metadata?: { fileNames?
   });
 
   // Forecasting
-  const forecasting = generateFinancialForecast(activeTxns, netSavings, closingAmount, periodDays);
+  const forecasting = generateFinancialForecast(
+    activeTxns,
+    netSavings,
+    closingAmount,
+    periodDays,
+  );
 
   // Goal Planner
   const monthlyIncome = Math.round((income / periodDays) * 30);
   const monthlyExpenses = Math.round((expenses / periodDays) * 30);
-  const goals = generateDefaultGoals(monthlyIncome, monthlyExpenses, netSavings);
+  const goals = metadata?.goals
+    ? metadata.goals.map((goal) => financialGoalSchema.parse(goal))
+    : generateDefaultGoals(
+        monthlyIncome,
+        monthlyExpenses,
+        roundMoney((netSavings / periodDays) * 30),
+        Math.max(0, closingAmount),
+      );
 
   // Spending Simulator Scenarios
-  const simulationScenarios = runSpendingSimulation(monthlyIncome, monthlyExpenses, closingAmount);
+  const simulationScenarios = runSpendingSimulation(
+    monthlyIncome,
+    monthlyExpenses,
+    closingAmount,
+  );
 
   // Trends
   const dailyTrend = buildDailyTrend(activeTxns);
@@ -244,13 +345,35 @@ export function buildReport(transactions: Transaction[], metadata?: { fileNames?
   const salary = detectSalary(activeTxns);
 
   // Alerts
-  const alerts = buildRiskAlerts(categories, subscriptions, income, expenses, debtExpenses);
+  const alerts = buildRiskAlerts(
+    categories,
+    subscriptions,
+    income,
+    expenses,
+    debtExpenses,
+  );
+  if (
+    observedClosing !== undefined &&
+    Math.abs(observedClosing - calculatedClosing) > 0.02
+  ) {
+    alerts.unshift({
+      severity: "high",
+      title: "Balance Reconciliation Difference",
+      detail: `Observed closing and calculated closing differ by ₹${roundMoney(observedClosing - calculatedClosing).toLocaleString("en-IN")}. Review missing rows, account boundaries, or statement order.`,
+    });
+  }
 
   // Personality & lifestyle
   const personality = determinePersonality(savingsRate, categories);
 
   const totalTxnCount = activeTxns.length;
-  const avgTxnValue = totalTxnCount > 0 ? Math.round(expenses / Math.max(1, activeTxns.filter(t => t.type === "expense").length)) : 0;
+  const avgTxnValue =
+    totalTxnCount > 0
+      ? Math.round(
+          expenses /
+            Math.max(1, activeTxns.filter((t) => t.type === "expense").length),
+        )
+      : 0;
 
   return {
     generatedAt: new Date().toISOString(),
@@ -262,21 +385,39 @@ export function buildReport(transactions: Transaction[], metadata?: { fileNames?
     balances: {
       opening: {
         amount: openingAmount,
-        source: observedOpening !== undefined ? "observed" : "estimated",
-        confidence: observedOpening !== undefined ? 1 : 0.65,
-        note: observedOpening !== undefined ? "Directly extracted from statement" : "Estimated baseline",
+        source:
+          observedOpening !== undefined
+            ? "observed"
+            : inferredOpening !== undefined
+              ? "calculated"
+              : "estimated",
+        confidence:
+          observedOpening !== undefined
+            ? 1
+            : inferredOpening !== undefined
+              ? 0.9
+              : 0,
+        note:
+          observedOpening !== undefined
+            ? "Opening balance stated by the bank"
+            : inferredOpening !== undefined
+              ? "Derived from the first running balance minus preceding account movements"
+              : "No opening balance supplied; zero baseline for cash-flow analysis",
       },
       closing: {
         amount: closingAmount,
         source: observedClosing !== undefined ? "observed" : "calculated",
         confidence: observedClosing !== undefined ? 1 : 0.85,
-        note: observedClosing !== undefined ? "Directly extracted from statement" : "Computed from net cash flow",
+        note:
+          observedClosing !== undefined
+            ? "Directly extracted from statement"
+            : "Computed from net cash flow",
       },
       calculatedClosing: {
         amount: calculatedClosing,
         source: "calculated",
         confidence: 0.95,
-        note: "Derived from verified opening balance + cash inflows - cash outflows",
+        note: "Opening balance plus all statement account movements, including transfers",
       },
     },
     totals: {
@@ -299,9 +440,14 @@ export function buildReport(transactions: Transaction[], metadata?: { fileNames?
     weeklyTrend,
     merchants,
     subscriptions,
-    opportunities: buildOpportunities(categories, subscriptions, expenses),
+    opportunities: buildOpportunities(
+      categories,
+      subscriptions,
+      monthlyExpenses,
+      periodDays,
+    ),
     alerts,
-    bills: subscriptions.map(s => ({
+    bills: subscriptions.map((s) => ({
       merchant: s.merchant,
       amount: s.monthlyCost,
       predictedDate: s.nextPaymentDate,
@@ -317,11 +463,12 @@ export function buildReport(transactions: Transaction[], metadata?: { fileNames?
       "Review your recurring subscriptions before next billing cycle to avoid inactive renewals.",
       "Maintain a 6-month liquid cushion in risk-free accounts before taking aggressive speculative exposure.",
     ],
-    transactions,
+    transactions: verifiedTxns,
     importSummary: {
       totalParsed: transactions.length,
-      duplicatesRemoved: 0,
-      transfersIdentified: activeTxns.filter(t => t.type === "transfer").length,
+      duplicatesRemoved: metadata?.duplicatesRemoved ?? 0,
+      transfersIdentified: activeTxns.filter((t) => t.type === "transfer")
+        .length,
       fileNames: metadata?.fileNames || ["uploaded-statement"],
     },
   };
@@ -329,42 +476,53 @@ export function buildReport(transactions: Transaction[], metadata?: { fileNames?
 
 function buildDailyTrend(transactions: Transaction[]) {
   const map = new Map<string, number>();
-  for (const t of transactions.filter(t => t.type === "expense")) {
-    map.set(t.date, (map.get(t.date) || 0) + Math.abs(t.amount));
+  for (const t of transactions.filter((t) => t.type === "expense")) {
+    map.set(t.date, roundMoney((map.get(t.date) || 0) + Math.abs(t.amount)));
   }
   return [...map.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .slice(-30)
-    .map(([date, amount]) => ({ date, amount: Math.round(amount) }));
+    .map(([date, amount]) => ({ date, amount }));
 }
 
 function buildWeeklyTrend(transactions: Transaction[]) {
   const map = new Map<string, number>();
-  for (const t of transactions.filter(t => t.type === "expense")) {
+  for (const t of transactions.filter((t) => t.type === "expense")) {
     const d = new Date(`${t.date}T00:00:00.000Z`);
     const weekStart = new Date(d);
     weekStart.setUTCDate(d.getUTCDate() - d.getUTCDay());
     const weekKey = weekStart.toISOString().slice(0, 10);
-    map.set(weekKey, (map.get(weekKey) || 0) + Math.abs(t.amount));
+    map.set(weekKey, roundMoney((map.get(weekKey) || 0) + Math.abs(t.amount)));
   }
   return [...map.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([week, amount]) => ({ week, amount: Math.round(amount) }));
+    .map(([week, amount]) => ({ week, amount }));
 }
 
 function detectSalary(transactions: Transaction[]) {
   const salaryTxns = transactions.filter(
-    t => t.type === "income" && /salary|payroll|stipend|wages|employer/i.test(`${t.description} ${t.category}`)
+    (t) =>
+      t.type === "income" &&
+      /salary|payroll|stipend|wages|employer/i.test(
+        `${t.description} ${t.category}`,
+      ),
   );
-  const highestIncome = transactions.filter(t => t.type === "income").sort((a, b) => b.amount - a.amount)[0];
+  const highestIncome = transactions
+    .filter((t) => t.type === "income")
+    .sort((a, b) => b.amount - a.amount)[0];
   const chosen = salaryTxns[0] ?? highestIncome;
 
   return {
     detected: Boolean(chosen),
     merchant: chosen ? chosen.merchant : "Not detected",
     amount: chosen ? chosen.amount : 0,
-    cadence: salaryTxns.length > 1 ? "Predictable monthly salary cadence" : "Single verified deposit detected",
-    trend: salaryTxns.length > 1 ? "Stable recurring income" : "Requires additional statements for historical growth trend",
+    cadence:
+      salaryTxns.length > 1
+        ? "Predictable monthly salary cadence"
+        : "Single verified deposit detected",
+    trend:
+      salaryTxns.length > 1
+        ? "Stable recurring income"
+        : "Requires additional statements for historical growth trend",
   };
 }
 
@@ -377,7 +535,7 @@ function buildRiskAlerts(
 ): InsightReport["alerts"] {
   const alerts: InsightReport["alerts"] = [];
 
-  if (expenses > income * 0.90) {
+  if (expenses > income * 0.9) {
     alerts.push({
       severity: "high",
       title: "High Outflow Ratio",
@@ -415,7 +573,8 @@ function buildRiskAlerts(
     alerts.push({
       severity: "low",
       title: "Balanced Cash Outflows",
-      detail: "No critical volatility anomalies or excessive expense concentrations detected.",
+      detail:
+        "No critical volatility anomalies or excessive expense concentrations detected.",
     });
   }
 
@@ -425,34 +584,47 @@ function buildRiskAlerts(
 function buildOpportunities(
   categories: { name: string; amount: number; percent: number }[],
   subscriptions: Subscription[],
-  expenses: number,
+  monthlyExpenses: number,
+  periodDays: number,
 ) {
   const top = categories[0];
-  const subSavings = Math.round(subscriptions.reduce((a, s) => a + s.annualCost, 0) * 0.35);
+  const monthlyTop = ((top?.amount ?? 0) / Math.max(1, periodDays)) * 30;
+  const subSavings = Math.round(
+    subscriptions.reduce((a, s) => a + s.annualCost, 0) * 0.35,
+  );
 
   return [
     {
       title: `Optimize ${top?.name ?? "discretionary"} spending by 10%`,
       detail: `Targeting a modest 10% reduction in your top category (${top?.name ?? "expenses"}) yields substantial annual savings.`,
-      yearlySavings: Math.round((top?.amount ?? expenses * 0.2) * 0.10 * 12),
+      yearlySavings: Math.round(monthlyTop * 0.1 * 12),
     },
     {
       title: "Prune redundant subscriptions",
-      detail: "Audit multi-service streaming, premium tiers, or neglected SaaS memberships before renewal.",
-      yearlySavings: subSavings > 0 ? subSavings : 4500,
+      detail:
+        "Audit multi-service streaming, premium tiers, or neglected SaaS memberships before renewal.",
+      yearlySavings: subSavings,
     },
     {
       title: "Payment method rewards optimization",
-      detail: "Routing recurring fuel, grocery, and utility payments via category-cashback cards yields ~1.8% return.",
-      yearlySavings: Math.round(expenses * 0.018 * 12),
+      detail:
+        "Routing recurring fuel, grocery, and utility payments via category-cashback cards yields ~1.8% return.",
+      yearlySavings: Math.round(monthlyExpenses * 0.018 * 12),
     },
   ];
 }
 
-function determinePersonality(savingsRate: number, categories: { name: string; amount: number; percent: number }[]): InsightReport["lifestyle"]["personality"] {
-  const investCategory = categories.find(c => c.name === "Investments");
+function determinePersonality(
+  savingsRate: number,
+  categories: { name: string; amount: number; percent: number }[],
+): InsightReport["lifestyle"]["personality"] {
+  const investCategory = categories.find((c) => c.name === "Investments");
   const luxuryPercent = categories
-    .filter(c => ["Shopping", "Travel", "Entertainment", "Food & Dining"].includes(c.name))
+    .filter((c) =>
+      ["Shopping", "Travel", "Entertainment", "Food", "Food & Dining"].includes(
+        c.name,
+      ),
+    )
     .reduce((acc, c) => acc + c.percent, 0);
 
   if (investCategory && investCategory.percent > 15) return "Investor";
@@ -462,7 +634,9 @@ function determinePersonality(savingsRate: number, categories: { name: string; a
   return "Balanced";
 }
 
-function personalitySummary(personality: InsightReport["lifestyle"]["personality"]): string {
+function personalitySummary(
+  personality: InsightReport["lifestyle"]["personality"],
+): string {
   switch (personality) {
     case "Saver":
       return "Disciplined capital preservation profile. Highly resilient cash cushions with capacity for compounding growth.";

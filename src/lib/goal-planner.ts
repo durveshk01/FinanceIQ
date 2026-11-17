@@ -1,25 +1,65 @@
 import { type FinancialGoal, type SimulationResult } from "./schemas";
 
-export function generateDefaultGoals(monthlyIncome: number, monthlyExpenses: number, netSavings: number): FinancialGoal[] {
+export function projectGoal(goal: FinancialGoal): FinancialGoal {
+  const remaining = Math.max(0, goal.targetAmount - goal.currentAmount);
+  const months =
+    remaining === 0
+      ? 0
+      : goal.monthlyContribution > 0
+        ? Math.ceil(remaining / goal.monthlyContribution)
+        : Infinity;
+  const projectedCompletionDate = computeProjectedDate(months);
+  return {
+    ...goal,
+    projectedCompletionDate,
+    onTrack:
+      remaining === 0 ||
+      (Number.isFinite(months) &&
+        months <= 1200 &&
+        projectedCompletionDate <= goal.deadline),
+  };
+}
+
+export function generateDefaultGoals(
+  monthlyIncome: number,
+  monthlyExpenses: number,
+  netSavings: number,
+  liquidBalance = 0,
+): FinancialGoal[] {
   const currentYear = new Date().getFullYear();
 
   // 1. Emergency Fund (3-6 months expenses)
-  const emergencyTarget = Math.round(monthlyExpenses * 6);
-  const emergencyCurrent = Math.round(monthlyExpenses * 1.5);
-  const emergencyMonthly = Math.round(Math.max(5000, netSavings * 0.4));
-  const emergencyMonthsNeeded = Math.ceil(Math.max(0, emergencyTarget - emergencyCurrent) / (emergencyMonthly || 1));
+  const availableSavings = Math.max(0, netSavings);
+  const emergencyTarget = Math.max(1, Math.round(monthlyExpenses * 6));
+  const emergencyCurrent = Math.min(
+    emergencyTarget,
+    Math.max(0, liquidBalance),
+  );
+  const emergencyMonthly = Math.round(availableSavings * 0.4);
+  const emergencyMonthsNeeded =
+    emergencyTarget <= emergencyCurrent
+      ? 0
+      : emergencyMonthly > 0
+        ? Math.ceil((emergencyTarget - emergencyCurrent) / emergencyMonthly)
+        : Infinity;
   const emergencyDeadline = `${currentYear + 1}-12-31`;
 
   // 2. Wealth Building / Long Term
-  const wealthTarget = 1000000;
-  const wealthCurrent = Math.round(monthlyIncome * 2);
-  const wealthMonthly = Math.round(Math.max(10000, netSavings * 0.5));
+  const wealthTarget = Math.max(
+    1000000,
+    Math.round(Math.max(0, monthlyIncome) * 12),
+  );
+  const wealthCurrent = 0;
+  const wealthMonthly = Math.round(availableSavings * 0.5);
   const wealthDeadline = `${currentYear + 3}-06-30`;
 
   // 3. Travel / Lifestyle Goal
   const travelTarget = 150000;
-  const travelCurrent = 25000;
-  const travelMonthly = Math.round(Math.max(3000, netSavings * 0.1));
+  const travelCurrent = 0;
+  const travelMonthly = Math.max(
+    0,
+    Math.round(availableSavings) - emergencyMonthly - wealthMonthly,
+  );
   const travelDeadline = `${currentYear + 1}-08-15`;
 
   return [
@@ -32,9 +72,12 @@ export function generateDefaultGoals(monthlyIncome: number, monthlyExpenses: num
       deadline: emergencyDeadline,
       priority: "high",
       monthlyContribution: emergencyMonthly,
-      expectedReturnRate: 6.5,
+      expectedReturnRate: 0,
       projectedCompletionDate: computeProjectedDate(emergencyMonthsNeeded),
-      onTrack: netSavings >= emergencyMonthly,
+      onTrack:
+        emergencyCurrent >= emergencyTarget ||
+        (emergencyMonthly > 0 &&
+          computeProjectedDate(emergencyMonthsNeeded) <= emergencyDeadline),
     },
     {
       id: "goal_wealth",
@@ -45,9 +88,16 @@ export function generateDefaultGoals(monthlyIncome: number, monthlyExpenses: num
       deadline: wealthDeadline,
       priority: "medium",
       monthlyContribution: wealthMonthly,
-      expectedReturnRate: 11.5,
-      projectedCompletionDate: computeProjectedDate(Math.ceil((wealthTarget - wealthCurrent) / (wealthMonthly || 1))),
-      onTrack: netSavings >= wealthMonthly,
+      expectedReturnRate: 0,
+      projectedCompletionDate: computeProjectedDate(
+        wealthMonthly > 0
+          ? Math.ceil((wealthTarget - wealthCurrent) / wealthMonthly)
+          : Infinity,
+      ),
+      onTrack:
+        wealthMonthly > 0 &&
+        computeProjectedDate(Math.ceil(wealthTarget / wealthMonthly)) <=
+          wealthDeadline,
     },
     {
       id: "goal_travel",
@@ -58,16 +108,26 @@ export function generateDefaultGoals(monthlyIncome: number, monthlyExpenses: num
       deadline: travelDeadline,
       priority: "low",
       monthlyContribution: travelMonthly,
-      expectedReturnRate: 5.0,
-      projectedCompletionDate: computeProjectedDate(Math.ceil((travelTarget - travelCurrent) / (travelMonthly || 1))),
-      onTrack: true,
+      expectedReturnRate: 0,
+      projectedCompletionDate: computeProjectedDate(
+        travelMonthly > 0
+          ? Math.ceil((travelTarget - travelCurrent) / travelMonthly)
+          : Infinity,
+      ),
+      onTrack:
+        travelMonthly > 0 &&
+        computeProjectedDate(Math.ceil(travelTarget / travelMonthly)) <=
+          travelDeadline,
     },
   ];
 }
 
 function computeProjectedDate(monthsAhead: number): string {
+  if (!Number.isFinite(monthsAhead) || monthsAhead > 1200)
+    return "Not funded within 100 years";
   const d = new Date();
-  d.setMonth(d.getMonth() + Math.max(1, monthsAhead));
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() + Math.max(0, monthsAhead));
   return d.toISOString().slice(0, 10);
 }
 
@@ -88,30 +148,57 @@ export function runSpendingSimulation(
 ): SimulationResult[] {
   // Current Scenario
   const currentSavings = baselineIncome - baselineExpenses;
-  const currentRate = baselineIncome > 0 ? Math.round((currentSavings / baselineIncome) * 100) : 0;
-  const currentRunway = baselineExpenses > 0 ? Number((closingBalance / baselineExpenses).toFixed(1)) : 0;
+  const currentRate =
+    baselineIncome > 0
+      ? Math.round((currentSavings / baselineIncome) * 100)
+      : 0;
+  const currentRunway =
+    baselineExpenses > 0
+      ? Number((closingBalance / baselineExpenses).toFixed(1))
+      : 0;
 
   // Conservative Scenario (15% discretionary trimming)
   const conservativeExpenses = Math.round(baselineExpenses * 0.88);
   const conservativeSavings = baselineIncome - conservativeExpenses;
-  const conservativeRate = baselineIncome > 0 ? Math.round((conservativeSavings / baselineIncome) * 100) : 0;
-  const conservativeRunway = conservativeExpenses > 0 ? Number((closingBalance / conservativeExpenses).toFixed(1)) : 0;
+  const conservativeRate =
+    baselineIncome > 0
+      ? Math.round((conservativeSavings / baselineIncome) * 100)
+      : 0;
+  const conservativeRunway =
+    conservativeExpenses > 0
+      ? Number((closingBalance / conservativeExpenses).toFixed(1))
+      : 0;
 
   // Balanced Scenario (8% food & shopping cut + subscription optimization)
   const balancedExpenses = Math.round(baselineExpenses * 0.93);
   const balancedSavings = baselineIncome - balancedExpenses;
-  const balancedRate = baselineIncome > 0 ? Math.round((balancedSavings / baselineIncome) * 100) : 0;
-  const balancedRunway = balancedExpenses > 0 ? Number((closingBalance / balancedExpenses).toFixed(1)) : 0;
+  const balancedRate =
+    baselineIncome > 0
+      ? Math.round((balancedSavings / baselineIncome) * 100)
+      : 0;
+  const balancedRunway =
+    balancedExpenses > 0
+      ? Number((closingBalance / balancedExpenses).toFixed(1))
+      : 0;
 
   // Aggressive Growth Scenario (20% cuts + 10% income side hustle/growth)
-  const aggressiveIncome = Math.round(baselineIncome * 1.10);
+  const aggressiveIncome = Math.round(baselineIncome * 1.1);
   const aggressiveExpenses = Math.round(baselineExpenses * 0.82);
   const aggressiveSavings = aggressiveIncome - aggressiveExpenses;
-  const aggressiveRate = aggressiveIncome > 0 ? Math.round((aggressiveSavings / aggressiveIncome) * 100) : 0;
-  const aggressiveRunway = aggressiveExpenses > 0 ? Number((closingBalance / aggressiveExpenses).toFixed(1)) : 0;
+  const aggressiveRate =
+    aggressiveIncome > 0
+      ? Math.round((aggressiveSavings / aggressiveIncome) * 100)
+      : 0;
+  const aggressiveRunway =
+    aggressiveExpenses > 0
+      ? Number((closingBalance / aggressiveExpenses).toFixed(1))
+      : 0;
 
   // Custom User Scenario
-  const customIncome = baselineIncome + (userDeltas.incomeDelta || 0);
+  const customIncome = Math.max(
+    0,
+    baselineIncome + (userDeltas.incomeDelta || 0),
+  );
   const totalExpenseDelta =
     (userDeltas.rentDelta || 0) +
     (userDeltas.foodDelta || 0) +
@@ -122,8 +209,12 @@ export function runSpendingSimulation(
     (userDeltas.unexpectedExpense || 0);
   const customExpenses = Math.max(0, baselineExpenses + totalExpenseDelta);
   const customSavings = customIncome - customExpenses;
-  const customRate = customIncome > 0 ? Math.round((customSavings / customIncome) * 100) : 0;
-  const customRunway = customExpenses > 0 ? Number((closingBalance / customExpenses).toFixed(1)) : 0;
+  const customRate =
+    customIncome > 0 ? Math.round((customSavings / customIncome) * 100) : 0;
+  const customRunway =
+    customExpenses > 0
+      ? Number((closingBalance / customExpenses).toFixed(1))
+      : 0;
 
   return [
     {

@@ -1,10 +1,20 @@
 import { z } from "zod";
 
 export const transactionTypeSchema = z.enum(["income", "expense", "transfer"]);
+const statementDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((value) => {
+    const time = Date.parse(`${value}T00:00:00Z`);
+    return (
+      Number.isFinite(time) &&
+      new Date(time).toISOString().slice(0, 10) === value
+    );
+  }, "Invalid calendar date");
 
 export const transactionSchema = z.object({
   id: z.string().min(1),
-  date: z.string().min(1),
+  date: statementDateSchema,
   description: z.string().min(1),
   merchant: z.string().min(1),
   debit: z.number().finite().nonnegative().default(0),
@@ -24,7 +34,13 @@ export const transactionSchema = z.object({
   notes: z.string().optional().default(""),
 });
 
-export const subscriptionCadenceSchema = z.enum(["weekly", "biweekly", "monthly", "quarterly", "annual"]);
+export const subscriptionCadenceSchema = z.enum([
+  "weekly",
+  "biweekly",
+  "monthly",
+  "quarterly",
+  "annual",
+]);
 
 export const subscriptionSchema = z.object({
   id: z.string().min(1),
@@ -83,7 +99,7 @@ export const financialGoalSchema = z.object({
   category: goalCategorySchema,
   targetAmount: z.number().finite().positive(),
   currentAmount: z.number().finite().nonnegative(),
-  deadline: z.string().min(1),
+  deadline: statementDateSchema,
   priority: z.enum(["low", "medium", "high"]).default("medium"),
   monthlyContribution: z.number().finite().nonnegative(),
   expectedReturnRate: z.number().finite().nonnegative().default(0),
@@ -125,7 +141,12 @@ export const forecastingSchema = z.object({
   nextMonthSavings: z.number().finite(),
   futureBalance90Days: z.number().finite(),
   goalProbability: z.number().finite(),
-  modelType: z.enum(["baseline_projection", "exponential_smoothing", "moving_average", "seasonal_trend"]),
+  modelType: z.enum([
+    "baseline_projection",
+    "exponential_smoothing",
+    "moving_average",
+    "seasonal_trend",
+  ]),
   confidenceInterval: z.object({
     lower: z.number().finite(),
     upper: z.number().finite(),
@@ -135,11 +156,13 @@ export const forecastingSchema = z.object({
     rmse: z.number().finite(),
     mape: z.number().finite(),
   }),
-  categoryForecasts: z.array(z.object({
-    name: z.string().min(1),
-    projectedAmount: z.number().finite().nonnegative(),
-    trend: z.enum(["up", "down", "flat"]),
-  })),
+  categoryForecasts: z.array(
+    z.object({
+      name: z.string().min(1),
+      projectedAmount: z.number().finite().nonnegative(),
+      trend: z.enum(["up", "down", "flat"]),
+    }),
+  ),
   explanation: z.string().min(1),
 });
 
@@ -167,33 +190,57 @@ export const insightReportSchema = z.object({
   }),
   health: healthScoreSchema,
   lifestyle: z.object({
-    personality: z.enum(["Saver", "Balanced", "Impulsive", "Luxury spender", "Investor"]),
+    personality: z.enum([
+      "Saver",
+      "Balanced",
+      "Impulsive",
+      "Luxury spender",
+      "Investor",
+    ]),
     summary: z.string().min(1),
   }),
   categories: z.array(categorySchema),
-  dailyTrend: z.array(z.object({ date: z.string().min(1), amount: z.number().finite().nonnegative() })),
-  weeklyTrend: z.array(z.object({ week: z.string().min(1), amount: z.number().finite().nonnegative() })),
-  merchants: z.array(z.object({
-    merchant: z.string().min(1),
-    amount: z.number().finite().nonnegative(),
-    transactions: z.number().int().nonnegative(),
-  })),
+  dailyTrend: z.array(
+    z.object({
+      date: z.string().min(1),
+      amount: z.number().finite().nonnegative(),
+    }),
+  ),
+  weeklyTrend: z.array(
+    z.object({
+      week: z.string().min(1),
+      amount: z.number().finite().nonnegative(),
+    }),
+  ),
+  merchants: z.array(
+    z.object({
+      merchant: z.string().min(1),
+      amount: z.number().finite().nonnegative(),
+      transactions: z.number().int().nonnegative(),
+    }),
+  ),
   subscriptions: z.array(subscriptionSchema),
-  opportunities: z.array(z.object({
-    title: z.string().min(1),
-    detail: z.string().min(1),
-    yearlySavings: z.number().finite().nonnegative(),
-  })),
-  alerts: z.array(z.object({
-    severity: z.enum(["low", "medium", "high"]),
-    title: z.string().min(1),
-    detail: z.string().min(1),
-  })),
-  bills: z.array(z.object({
-    merchant: z.string().min(1),
-    amount: z.number().finite().nonnegative(),
-    predictedDate: z.string().min(1),
-  })),
+  opportunities: z.array(
+    z.object({
+      title: z.string().min(1),
+      detail: z.string().min(1),
+      yearlySavings: z.number().finite().nonnegative(),
+    }),
+  ),
+  alerts: z.array(
+    z.object({
+      severity: z.enum(["low", "medium", "high"]),
+      title: z.string().min(1),
+      detail: z.string().min(1),
+    }),
+  ),
+  bills: z.array(
+    z.object({
+      merchant: z.string().min(1),
+      amount: z.number().finite().nonnegative(),
+      predictedDate: z.string().min(1),
+    }),
+  ),
   forecasting: forecastingSchema,
   weekendVsWeekday: z.object({
     weekend: z.number().finite().nonnegative(),
@@ -206,16 +253,18 @@ export const insightReportSchema = z.object({
     cadence: z.string(),
     trend: z.string(),
   }),
-  goals: z.array(financialGoalSchema).default([]),
+  goals: z.array(financialGoalSchema).max(50).default([]),
   simulationScenarios: z.array(simulationResultSchema).default([]),
   coachTips: z.array(z.string()),
   transactions: z.array(transactionSchema).max(10000),
-  importSummary: z.object({
-    totalParsed: z.number().int().nonnegative(),
-    duplicatesRemoved: z.number().int().nonnegative(),
-    transfersIdentified: z.number().int().nonnegative(),
-    fileNames: z.array(z.string()),
-  }).optional(),
+  importSummary: z
+    .object({
+      totalParsed: z.number().int().nonnegative(),
+      duplicatesRemoved: z.number().int().nonnegative(),
+      transfersIdentified: z.number().int().nonnegative(),
+      fileNames: z.array(z.string()),
+    })
+    .optional(),
 });
 
 export const chatRequestSchema = z.object({
@@ -227,11 +276,13 @@ export const chatRequestSchema = z.object({
 export const exportRequestSchema = z.object({
   report: insightReportSchema,
   format: z.enum(["csv", "xlsx", "pdf", "json"]),
-  filters: z.object({
-    startDate: z.string().optional(),
-    endDate: z.string().optional(),
-    category: z.string().optional(),
-  }).optional(),
+  filters: z
+    .object({
+      startDate: z.string().optional(),
+      endDate: z.string().optional(),
+      category: z.string().optional(),
+    })
+    .optional(),
 });
 
 export type Transaction = z.infer<typeof transactionSchema>;

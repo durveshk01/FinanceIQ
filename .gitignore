@@ -19,6 +19,7 @@
 
 # production
 /build
+/dist/
 
 # misc
 .DS_Store
@@ -46,6 +47,10 @@ next-env.d.ts
 
 # Android Build Outputs
 *.apk
+*.aab
+*.jks
+*.keystore
+android/signing/
 android/app/build/
 android/.gradle/
 android/local.properties
@@ -53,3 +58,12 @@ android/local.properties
 # Render Backend
 render-backend/dist/
 render-backend/node_modules/
+render-backend/data/
+
+# Generated offline assets and test results
+/public/pdf/
+/public/ocr/
+/test-results/
+/playwright-report/
+/.capacitor/
+android/keystore.properties

@@ -9,122 +9,437 @@ export type CategoryDefinition = {
 };
 
 export const CATEGORIES: Record<string, CategoryDefinition> = {
-  "Food": {
+  Food: {
     name: "Food",
     subcategories: ["Restaurants", "Cafes", "Delivery", "Fast Food", "Bars"],
-    keywords: ["restaurant", "cafe", "coffee", "bistro", "bakery", "diner", "pizza", "burger", "bar", "pub", "food", "dining", "eats", "canteen"],
-    merchants: ["swiggy", "zomato", "starbucks", "mcdonald", "kfc", "domino", "subway", "burger king", "haldiram", "chaayos", "chai point", "barbeque nation"],
+    keywords: [
+      "restaurant",
+      "cafe",
+      "coffee",
+      "bistro",
+      "bakery",
+      "diner",
+      "pizza",
+      "burger",
+      "bar",
+      "pub",
+      "food",
+      "dining",
+      "eats",
+      "canteen",
+    ],
+    merchants: [
+      "swiggy",
+      "zomato",
+      "starbucks",
+      "mcdonald",
+      "kfc",
+      "domino",
+      "subway",
+      "burger king",
+      "haldiram",
+      "chaayos",
+      "chai point",
+      "barbeque nation",
+    ],
     isFixed: false,
   },
-  "Groceries": {
+  Groceries: {
     name: "Groceries",
     subcategories: ["Supermarket", "Fruits & Veg", "Dairy", "Convenience"],
-    keywords: ["grocery", "supermarket", "hypermarket", "mart", "provision", "daily needs", "kirana", "milk", "vegetables", "fruits"],
-    merchants: ["dmart", "bigbasket", "blinkit", "zepto", "instamart", "reliance fresh", "more retail", "spencer", "natures basket", "dunzo"],
+    keywords: [
+      "grocery",
+      "supermarket",
+      "hypermarket",
+      "mart",
+      "provision",
+      "daily needs",
+      "kirana",
+      "milk",
+      "vegetables",
+      "fruits",
+    ],
+    merchants: [
+      "dmart",
+      "bigbasket",
+      "blinkit",
+      "zepto",
+      "instamart",
+      "reliance fresh",
+      "more retail",
+      "spencer",
+      "natures basket",
+      "dunzo",
+    ],
     isFixed: true,
   },
-  "Shopping": {
+  Shopping: {
     name: "Shopping",
     subcategories: ["Electronics", "Clothing", "Home", "Footwear", "Beauty"],
-    keywords: ["amazon", "flipkart", "myntra", "retail", "store", "apparel", "clothing", "fashion", "mall", "ecommerce", "electronics"],
-    merchants: ["amazon", "flipkart", "myntra", "ajio", "nykaa", "tata cliq", "croma", "reliance digital", "ikea", "decathlon", "zara", "h&m"],
+    keywords: [
+      "amazon",
+      "flipkart",
+      "myntra",
+      "retail",
+      "store",
+      "apparel",
+      "clothing",
+      "fashion",
+      "mall",
+      "ecommerce",
+      "electronics",
+    ],
+    merchants: [
+      "amazon",
+      "flipkart",
+      "myntra",
+      "ajio",
+      "nykaa",
+      "tata cliq",
+      "croma",
+      "reliance digital",
+      "ikea",
+      "decathlon",
+      "zara",
+      "h&m",
+    ],
     isFixed: false,
   },
-  "Transport": {
+  Transport: {
     name: "Transport",
     subcategories: ["Rideshare", "Public Transit", "Tolls", "Parking"],
-    keywords: ["metro", "cab", "taxi", "ride", "auto", "parking", "toll", "fastag", "bus", "train ticket", "transit"],
-    merchants: ["uber", "ola", "rapido", "blusmart", "delhi metro", "dmrc", "bmrc", "fastag", "irctc"],
+    keywords: [
+      "metro",
+      "cab",
+      "taxi",
+      "ride",
+      "auto",
+      "parking",
+      "toll",
+      "fastag",
+      "bus",
+      "train ticket",
+      "transit",
+    ],
+    merchants: [
+      "uber",
+      "ola",
+      "rapido",
+      "blusmart",
+      "delhi metro",
+      "dmrc",
+      "bmrc",
+      "fastag",
+      "irctc",
+    ],
     isFixed: false,
   },
-  "Fuel": {
+  Fuel: {
     name: "Fuel",
     subcategories: ["Petrol", "Diesel", "EV Charging", "Gas"],
     keywords: ["fuel", "petrol", "diesel", "gas station", "ev charging", "cng"],
-    merchants: ["indian oil", "ioc", "bharat petroleum", "bpcl", "hindustan petroleum", "hpcl", "shell", "reliance petroleum", "ather grid", "tata power ev"],
+    merchants: [
+      "indian oil",
+      "ioc",
+      "bharat petroleum",
+      "bpcl",
+      "hindustan petroleum",
+      "hpcl",
+      "shell",
+      "reliance petroleum",
+      "ather grid",
+      "tata power ev",
+    ],
     isFixed: true,
   },
-  "Housing": {
+  Housing: {
     name: "Housing",
     subcategories: ["Rent", "Maintenance", "Property Tax", "Repairs"],
-    keywords: ["rent", "maintenance", "society", "property tax", "housing", "landlord", "apartment", "brokerage"],
+    keywords: [
+      "rent",
+      "maintenance",
+      "society",
+      "property tax",
+      "housing",
+      "landlord",
+      "apartment",
+      "brokerage",
+    ],
     merchants: ["nobroker", "magicbricks", "housing.com", "mygate", "nestaway"],
     isFixed: true,
   },
-  "Utilities": {
+  Utilities: {
     name: "Utilities",
     subcategories: ["Electricity", "Water", "Gas", "Broadband", "Mobile"],
-    keywords: ["electricity", "water bill", "gas bill", "broadband", "wifi", "internet", "dth", "recharge", "utility"],
-    merchants: ["airtel", "jio", "vodafone", "vi", "tata play", "bescom", "mseb", "tneb", "adani electricity", "tatapower", "act fibernet"],
+    keywords: [
+      "electricity",
+      "water bill",
+      "gas bill",
+      "broadband",
+      "wifi",
+      "internet",
+      "dth",
+      "recharge",
+      "utility",
+    ],
+    merchants: [
+      "airtel",
+      "jio",
+      "vodafone",
+      "vi",
+      "tata play",
+      "bescom",
+      "mseb",
+      "tneb",
+      "adani electricity",
+      "tatapower",
+      "act fibernet",
+    ],
     isFixed: true,
   },
-  "Health": {
+  Health: {
     name: "Health",
     subcategories: ["Pharmacy", "Doctor", "Diagnostic", "Hospital", "Dental"],
-    keywords: ["pharmacy", "medical", "clinic", "hospital", "doctor", "lab", "diagnostic", "medicines", "dentist", "healthcare"],
-    merchants: ["apollo", "medplus", "1mg", "pharmeasy", "netmeds", "dr lal pathlabs", "metropolis", "max healthcare", "fortis"],
+    keywords: [
+      "pharmacy",
+      "medical",
+      "clinic",
+      "hospital",
+      "doctor",
+      "lab",
+      "diagnostic",
+      "medicines",
+      "dentist",
+      "healthcare",
+    ],
+    merchants: [
+      "apollo",
+      "medplus",
+      "1mg",
+      "pharmeasy",
+      "netmeds",
+      "dr lal pathlabs",
+      "metropolis",
+      "max healthcare",
+      "fortis",
+    ],
     isFixed: true,
   },
-  "Entertainment": {
+  Entertainment: {
     name: "Entertainment",
     subcategories: ["Streaming", "Movies", "Gaming", "Events"],
-    keywords: ["movie", "cinema", "theater", "concert", "show", "gaming", "steam", "playstation", "xbox", "music", "video"],
-    merchants: ["netflix", "spotify", "prime video", "hotstar", "bookmyshow", "pvr", "inox", "youtube", "apple media", "steam", "playstation"],
+    keywords: [
+      "movie",
+      "cinema",
+      "theater",
+      "concert",
+      "show",
+      "gaming",
+      "steam",
+      "playstation",
+      "xbox",
+      "music",
+      "video",
+    ],
+    merchants: [
+      "netflix",
+      "spotify",
+      "prime video",
+      "hotstar",
+      "bookmyshow",
+      "pvr",
+      "inox",
+      "youtube",
+      "apple media",
+      "steam",
+      "playstation",
+    ],
     isFixed: false,
   },
-  "Education": {
+  Education: {
     name: "Education",
     subcategories: ["Courses", "Books", "School Fees", "Tuition"],
-    keywords: ["school", "college", "tuition", "course", "udemy", "coursera", "university", "academy", "books", "stationery"],
-    merchants: ["udemy", "coursera", "edx", "byju", "unacademy", "simplilearn", "upgrad"],
+    keywords: [
+      "school",
+      "college",
+      "tuition",
+      "course",
+      "udemy",
+      "coursera",
+      "university",
+      "academy",
+      "books",
+      "stationery",
+    ],
+    merchants: [
+      "udemy",
+      "coursera",
+      "edx",
+      "byju",
+      "unacademy",
+      "simplilearn",
+      "upgrad",
+    ],
     isFixed: false,
   },
-  "Travel": {
+  Travel: {
     name: "Travel",
     subcategories: ["Flights", "Hotels", "Vacation", "Car Rental"],
-    keywords: ["hotel", "flight", "airline", "resort", "vacation", "trip", "booking", "homestay"],
-    merchants: ["makemytrip", "goibibo", "cleartrip", "airbnb", "agoda", "booking.com", "indigo", "air india", "vistara", "spicejet"],
+    keywords: [
+      "hotel",
+      "flight",
+      "airline",
+      "resort",
+      "vacation",
+      "trip",
+      "booking",
+      "homestay",
+    ],
+    merchants: [
+      "makemytrip",
+      "goibibo",
+      "cleartrip",
+      "airbnb",
+      "agoda",
+      "booking.com",
+      "indigo",
+      "air india",
+      "vistara",
+      "spicejet",
+    ],
     isFixed: false,
   },
-  "Debt": {
+  Debt: {
     name: "Debt",
-    subcategories: ["Home Loan", "Car Loan", "Personal Loan", "Credit Card EMI"],
-    keywords: ["credit card", "card bill", "emi", "loan", "repayment", "instalment", "principal", "interest payment", "fintech loan"],
-    merchants: ["bajaj finance", "hdfc bank loan", "sbi loan", "icici loan", "cred emi", "tata capital", "kreditbee", "paylater"],
+    subcategories: [
+      "Home Loan",
+      "Car Loan",
+      "Personal Loan",
+      "Credit Card EMI",
+    ],
+    keywords: [
+      "credit card",
+      "card bill",
+      "emi",
+      "loan",
+      "repayment",
+      "instalment",
+      "principal",
+      "interest payment",
+      "fintech loan",
+    ],
+    merchants: [
+      "bajaj finance",
+      "hdfc bank loan",
+      "sbi loan",
+      "icici loan",
+      "cred emi",
+      "tata capital",
+      "kreditbee",
+      "paylater",
+    ],
     isFixed: true,
   },
-  "Insurance": {
+  Insurance: {
     name: "Insurance",
     subcategories: ["Health Insurance", "Term Life", "Motor Insurance"],
-    keywords: ["insurance", "premium", "policy", "lic", "assurance", "life cover"],
-    merchants: ["lic", "hdfc ergo", "icici lombard", "star health", "policybazaar", "care health", "tata aig", "acko"],
+    keywords: [
+      "insurance",
+      "premium",
+      "policy",
+      "lic",
+      "assurance",
+      "life cover",
+    ],
+    merchants: [
+      "lic",
+      "hdfc ergo",
+      "icici lombard",
+      "star health",
+      "policybazaar",
+      "care health",
+      "tata aig",
+      "acko",
+    ],
     isFixed: true,
   },
-  "Investments": {
+  Investments: {
     name: "Investments",
     subcategories: ["Mutual Funds", "Stocks", "SIP", "Gold", "Crypto"],
-    keywords: ["mutual fund", "sip", "stocks", "equity", "investment", "bonds", "nps", "ppf", "demat"],
-    merchants: ["zerodha", "groww", "upstox", "angel one", "kuvera", "coin", "camsonline", "kfintech", "etmoney", "motilal oswal"],
+    keywords: [
+      "mutual fund",
+      "sip",
+      "stocks",
+      "equity",
+      "investment",
+      "bonds",
+      "nps",
+      "ppf",
+      "demat",
+    ],
+    merchants: [
+      "zerodha",
+      "groww",
+      "upstox",
+      "angel one",
+      "kuvera",
+      "coin",
+      "camsonline",
+      "kfintech",
+      "etmoney",
+      "motilal oswal",
+    ],
     isFixed: false,
   },
-  "Salary": {
+  Salary: {
     name: "Salary",
     subcategories: ["Monthly Pay", "Bonus", "Incentive"],
-    keywords: ["salary", "payroll", "stipend", "wages", "remuneration", "employer"],
-    merchants: ["acme corp", "tcs", "infosys", "wipro", "cognizant", "accenture", "google", "microsoft", "amazon payroll"],
+    keywords: [
+      "salary",
+      "payroll",
+      "stipend",
+      "wages",
+      "remuneration",
+      "employer",
+    ],
+    merchants: [
+      "acme corp",
+      "tcs",
+      "infosys",
+      "wipro",
+      "cognizant",
+      "accenture",
+      "google",
+      "microsoft",
+      "amazon payroll",
+    ],
     isFixed: false,
   },
-  "Interest": {
+  Interest: {
     name: "Interest",
     subcategories: ["Savings Interest", "FD Interest", "Dividend"],
-    keywords: ["interest cr", "savings interest", "fd interest", "dividend", "int.pd"],
+    keywords: [
+      "interest cr",
+      "savings interest",
+      "fd interest",
+      "dividend",
+      "int.pd",
+    ],
     merchants: ["bank interest", "rbi", "corporate dividend"],
     isFixed: false,
   },
-  "Transfers": {
+  Transfers: {
     name: "Transfers",
     subcategories: ["Self Transfer", "Internal", "Credit Card Payment"],
-    keywords: ["self transfer", "transfer to own", "to account", "cc payment", "credit card bill", "cred payment", "wallet topup"],
+    keywords: [
+      "self transfer",
+      "transfer to own",
+      "to account",
+      "cc payment",
+      "credit card bill",
+      "cred payment",
+      "wallet topup",
+    ],
     merchants: ["cred", "paytm wallet", "mobikwik", "amazon pay balance"],
     isFixed: false,
   },
@@ -146,6 +461,21 @@ export function cleanDescription(raw: string): string {
     .trim();
 }
 
+function matchesTerm(text: string, term: string): boolean {
+  const normalized = text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  const needle = term
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  return (
+    ` ${normalized} `.includes(` ${needle} `) ||
+    (needle === "dmart" && /\bd mart\b/.test(normalized))
+  );
+}
+
 export function extractMerchant(description: string): string {
   const cleaned = cleanDescription(description);
 
@@ -153,9 +483,12 @@ export function extractMerchant(description: string): string {
   const lower = cleaned.toLowerCase();
   for (const cat of Object.values(CATEGORIES)) {
     for (const m of cat.merchants) {
-      if (lower.includes(m)) {
+      if (matchesTerm(lower, m)) {
         // Return title-cased recognized merchant
-        return m.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+        return m
+          .split(" ")
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" ");
       }
     }
   }
@@ -163,7 +496,10 @@ export function extractMerchant(description: string): string {
   // UPI pattern: UPI/123456/MERCHANT NAME/bank or UPI-MERCHANT-VPA
   const upiMatch = cleaned.match(/UPI(?:-|\/)[^/]+\/([^/]+)/i);
   if (upiMatch && upiMatch[1]) {
-    const candidate = upiMatch[1].replace(/@[a-zA-Z0-9.-]+/g, "").replace(/[^a-zA-Z0-9 ]/g, " ").trim();
+    const candidate = upiMatch[1]
+      .replace(/@[a-zA-Z0-9.-]+/g, "")
+      .replace(/[^a-zA-Z0-9 ]/g, " ")
+      .trim();
     if (candidate.length > 2) return candidate;
   }
 
@@ -176,25 +512,34 @@ export function extractMerchant(description: string): string {
 
   // Clean common transaction prefixes/suffixes
   const stripped = cleaned
-    .replace(/\b(UPI|POS|NEFT|IMPS|RTGS|ACH|NACH|INB|BIL|TPT|FT|ATM|WDL|DEP|TXN|CR|DR|REF|CMS|VPA)\b/gi, "")
+    .replace(
+      /\b(UPI|POS|NEFT|IMPS|RTGS|ACH|NACH|INB|BIL|TPT|FT|ATM|WDL|DEP|TXN|CR|DR|REF|CMS|VPA)\b/gi,
+      "",
+    )
     .replace(/\b\d{4,}\b/g, "") // Strip account or reference numbers
     .replace(/@[a-zA-Z0-9.-]+/g, "") // Strip VPAs
     .replace(/[^a-zA-Z ]/g, " ")
     .trim();
 
-  const words = stripped.split(/\s+/).filter(w => w.length > 1);
+  const words = stripped.split(/\s+/).filter((w) => w.length > 1);
   if (words.length > 0) {
-    return words.slice(0, 3).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+    return words
+      .slice(0, 3)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(" ");
   }
 
   return "General Merchant";
 }
 
-export function isTransferTransaction(description: string, categoryName?: string): boolean {
+export function isTransferTransaction(
+  description: string,
+  categoryName?: string,
+): boolean {
   const lower = description.toLowerCase();
   if (categoryName === "Transfers") return true;
-  return (
-    /\b(self\s*transfer|transfer\s*to\s*own|own\s*a\/c|sweep|auto-sweep|mod\s*balance|reverse\s*sweep|sweep\s*trf|intra-bank\s*transfer)\b/i.test(lower)
+  return /\b(self\s*transfer|transfer\s*to\s*own|own\s*a\/c|sweep|auto-sweep|mod\s*balance|reverse\s*sweep|sweep\s*trf)\b/i.test(
+    lower,
   );
 }
 
@@ -228,7 +573,9 @@ export function categorizeTransaction(
   if (isTransferTransaction(cleaned)) {
     return {
       category: "Transfers",
-      subcategory: lower.includes("credit card") ? "Credit Card Payment" : "Self Transfer",
+      subcategory: lower.includes("credit card")
+        ? "Credit Card Payment"
+        : "Self Transfer",
       merchant,
       confidence: 0.95,
       isTransfer: true,
@@ -251,7 +598,9 @@ export function categorizeTransaction(
     if (/\b(interest|dividend|yield)\b/i.test(lower)) {
       return {
         category: "Interest & Dividends",
-        subcategory: lower.includes("dividend") ? "Dividend" : "Savings Interest",
+        subcategory: lower.includes("dividend")
+          ? "Dividend"
+          : "Savings Interest",
         merchant,
         confidence: 0.9,
         isTransfer: false,
@@ -278,10 +627,36 @@ export function categorizeTransaction(
     };
   }
 
+  // Evaluate every known merchant before broad keywords. Otherwise "mart"
+  // can win over a recognized shop, and short names such as "vi" match words.
+  const expenseCategories = Object.entries(CATEGORIES).filter(
+    ([name]) => !["Salary", "Interest", "Transfers"].includes(name),
+  );
+  for (const [catName, def] of expenseCategories) {
+    if (
+      def.merchants.some(
+        (m) => matchesTerm(merchantLower, m) || matchesTerm(lower, m),
+      )
+    ) {
+      return {
+        category: catName,
+        subcategory: def.subcategories[0] ?? "General",
+        merchant,
+        confidence: 0.94,
+        isTransfer: false,
+        isIncome: false,
+      };
+    }
+  }
+
   // Expense categorization matching
-  for (const [catName, def] of Object.entries(CATEGORIES)) {
+  for (const [catName, def] of expenseCategories) {
     // 1. Merchant match (high confidence)
-    if (def.merchants.some(m => merchantLower.includes(m) || lower.includes(m))) {
+    if (
+      def.merchants.some(
+        (m) => matchesTerm(merchantLower, m) || matchesTerm(lower, m),
+      )
+    ) {
       return {
         category: catName,
         subcategory: def.subcategories[0] ?? "General",
@@ -293,7 +668,7 @@ export function categorizeTransaction(
     }
 
     // 2. Keyword match
-    if (def.keywords.some(k => lower.includes(k))) {
+    if (def.keywords.some((k) => matchesTerm(lower, k))) {
       return {
         category: catName,
         subcategory: def.subcategories[0] ?? "General",
@@ -307,8 +682,8 @@ export function categorizeTransaction(
 
   // Default fallback
   return {
-    category: "Shopping",
-    subcategory: "General Retail",
+    category: "Other Expenses",
+    subcategory: "Uncategorized",
     merchant,
     confidence: 0.55,
     isTransfer: false,

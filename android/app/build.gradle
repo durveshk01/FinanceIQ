@@ -1,14 +1,31 @@
 apply plugin: 'com.android.application'
 
+def packageInfo = new groovy.json.JsonSlurper().parse(rootProject.file('../package.json'))
+def signingProperties = new Properties()
+def signingPropertiesFile = rootProject.file('keystore.properties')
+if (signingPropertiesFile.exists()) {
+    signingPropertiesFile.withInputStream { signingProperties.load(it) }
+}
+def signingValue = { env, key -> System.getenv(env) ?: signingProperties.getProperty(key) }
+def releaseStore = signingValue('FINANCEIQ_KEYSTORE_PATH', 'storeFile')
+def releaseStorePassword = signingValue('FINANCEIQ_KEYSTORE_PASSWORD', 'storePassword')
+def releaseAlias = signingValue('FINANCEIQ_KEY_ALIAS', 'keyAlias')
+def releaseKeyPassword = signingValue('FINANCEIQ_KEY_PASSWORD', 'keyPassword')
+def releaseSigningConfigured = releaseStore && releaseStorePassword && releaseAlias && releaseKeyPassword
+
 android {
     namespace = "com.durvesh.financeiq"
     compileSdk = rootProject.ext.compileSdkVersion
+    testBuildType = project.findProperty('androidTestBuildType') ?: 'debug'
+    sourceSets {
+        androidTest.assets.srcDir(rootProject.file('../.capacitor/android-test-assets'))
+    }
     defaultConfig {
         applicationId "com.durvesh.financeiq"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0.0"
+        versionCode 2
+        versionName packageInfo.version
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,12 +33,29 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (releaseSigningConfigured) {
+                storeFile rootProject.file(releaseStore)
+                storePassword releaseStorePassword
+                keyAlias releaseAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
     buildTypes {
         release {
-            signingConfig signingConfigs.debug
+            if (releaseSigningConfigured) signingConfig signingConfigs.release
+            debuggable false
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
+    }
+}
+
+gradle.taskGraph.whenReady { graph ->
+    if (!releaseSigningConfigured && graph.allTasks.any { it.path == ':app:packageRelease' || it.path == ':app:bundleRelease' }) {
+        throw new GradleException('Release signing is required. Run npm run android:signing or configure the FINANCEIQ_KEYSTORE_* environment variables.')
     }
 }
 

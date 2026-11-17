@@ -2,9 +2,12 @@ name: FinanceIQ CI Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   validate-and-test:
@@ -30,6 +33,19 @@ jobs:
       - name: Run ESLint
         run: npm run lint
 
+      - name: Check formatting and repository secrets
+        run: |
+          npm run format:check
+          npm run audit:repository
+
+      - name: Prepare offline parser assets
+        run: npm run prepare:assets
+
+      - name: Check dependency vulnerabilities
+        run: |
+          npm audit
+          npm --prefix render-backend audit
+
       - name: Run TypeScript type check
         run: npm run typecheck
 
@@ -38,3 +54,21 @@ jobs:
 
       - name: Verify Production Web Build
         run: npm run build
+
+      - name: Build backend
+        run: npm --prefix render-backend run build
+
+      - name: Install browser test runtime
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify desktop and mobile workflows
+        run: npm run test:browser
+
+      - name: Upload browser failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-diagnostics
+          path: |
+            playwright-report/
+            test-results/

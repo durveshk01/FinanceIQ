@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+dist/
+android/
+.capacitor/
+.vercel/
+public/pdf/
+public/ocr/
+package-lock.json
+render-backend/package-lock.json
+render-backend/dist/
+render-backend/node_modules/
+playwright-report/
+test-results/

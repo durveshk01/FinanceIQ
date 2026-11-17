@@ -10,25 +10,60 @@ function escapeXml(value: string) {
 
 export function safeCsvCell(value: string | number) {
   const text = String(value);
-  const formulaSafe = /^[=+\-@]/.test(text) ? `'${text}` : text;
+  const formulaSafe =
+    typeof value === "string" && /^[\s\uFEFF]*[=+\-@]/.test(text)
+      ? `'${text}`
+      : text;
   return `"${formulaSafe.replace(/"/g, '""')}"`;
 }
 
 export function reportToCsv(report: InsightReport) {
   const rows = [
-    ["Date", "Merchant", "Description", "Category", "Amount", "Type"],
-    ...report.transactions.map((txn) => [txn.date, txn.merchant, txn.description, txn.category, String(txn.amount), txn.type]),
+    [
+      "Date",
+      "Merchant",
+      "Description",
+      "Category",
+      "Amount",
+      "Type",
+      "Debit",
+      "Credit",
+      "Running Balance",
+      "Reference",
+      "Excluded",
+    ],
+    ...report.transactions.map((txn) => [
+      txn.date,
+      txn.merchant,
+      txn.description,
+      txn.category,
+      txn.amount,
+      txn.type,
+      txn.debit,
+      txn.credit,
+      txn.runningBalance ?? "",
+      txn.reference,
+      String(txn.isExcluded),
+    ]),
   ];
-  return rows.map((row) => row.map((cell) => safeCsvCell(cell)).join(",")).join("\n");
+  return rows
+    .map((row) => row.map((cell) => safeCsvCell(cell)).join(","))
+    .join("\n");
 }
 
 export function reportToPdfHtml(report: InsightReport) {
   const categories = report.categories
-    .map((category) => `<tr><td>${escapeXml(category.name)}</td><td>${category.amount}</td><td>${category.percent}%</td></tr>`)
+    .map(
+      (category) =>
+        `<tr><td>${escapeXml(category.name)}</td><td>${category.amount}</td><td>${category.percent}%</td></tr>`,
+    )
     .join("");
   const transactions = report.transactions
     .slice(0, 100)
-    .map((txn) => `<tr><td>${escapeXml(txn.date)}</td><td>${escapeXml(txn.merchant)}</td><td>${escapeXml(txn.category)}</td><td>${txn.amount}</td></tr>`)
+    .map(
+      (txn) =>
+        `<tr><td>${escapeXml(txn.date)}</td><td>${escapeXml(txn.merchant)}</td><td>${escapeXml(txn.category)}</td><td>${txn.amount}</td></tr>`,
+    )
     .join("");
 
   return `<!doctype html>
@@ -64,7 +99,7 @@ export function reportToPdfHtml(report: InsightReport) {
 }
 
 export async function reportToXlsx(report: InsightReport) {
-  const ExcelJS = await import("exceljs");
+  const { default: ExcelJS } = await import("exceljs");
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "FinanceIQ";
   workbook.created = new Date();
@@ -91,64 +126,141 @@ export async function reportToXlsx(report: InsightReport) {
     { header: "Category", key: "category", width: 20 },
     { header: "Amount", key: "amount", width: 16 },
     { header: "Type", key: "type", width: 12 },
+    { header: "Debit", key: "debit", width: 16 },
+    { header: "Credit", key: "credit", width: 16 },
+    { header: "Running Balance", key: "balance", width: 20 },
+    { header: "Reference", key: "reference", width: 24 },
+    { header: "Excluded", key: "excluded", width: 12 },
   ];
-  transactions.addRows(report.transactions.map((txn) => ({
-    date: txn.date,
-    merchant: txn.merchant,
-    description: txn.description,
-    category: txn.category,
-    amount: txn.amount,
-    type: txn.type,
-  })));
+  transactions.addRows(
+    report.transactions.map((txn) => ({
+      date: txn.date,
+      merchant: txn.merchant,
+      description: txn.description,
+      category: txn.category,
+      amount: txn.amount,
+      type: txn.type,
+      debit: txn.debit,
+      credit: txn.credit,
+      balance: txn.runningBalance,
+      reference: txn.reference,
+      excluded: txn.isExcluded,
+    })),
+  );
 
   for (const worksheet of [summary, transactions]) {
     worksheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
-    worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F766E" } };
+    worksheet.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF0F766E" },
+    };
     worksheet.views = [{ state: "frozen", ySplit: 1 }];
   }
 
   return workbook.xlsx.writeBuffer();
 }
 
-export async function reportToPdf(report: InsightReport) {
-  const PDFDocument = (await import("pdfkit")).default;
+export async function reportToPdf(
+  report: InsightReport,
+  fonts?: { regular: ArrayBuffer; bold: ArrayBuffer },
+): Promise<Uint8Array> {
+  const PDFDocument = (await import("pdfkit/js/pdfkit.standalone.js")).default;
   const doc = new PDFDocument({ margin: 48, size: "A4" });
-  const chunks: Buffer[] = [];
+  const chunks: Uint8Array[] = [];
 
-  doc.on("data", (chunk: Buffer) => chunks.push(chunk));
-  const done = new Promise<Buffer>((resolve) => {
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
+  doc.on("data", (chunk: Uint8Array) => chunks.push(chunk));
+  const done = new Promise<Uint8Array>((resolve, reject) => {
+    doc.on("error", reject);
+    doc.on("end", () => {
+      const output = new Uint8Array(
+        chunks.reduce((sum, chunk) => sum + chunk.length, 0),
+      );
+      let offset = 0;
+      for (const chunk of chunks) {
+        output.set(chunk, offset);
+        offset += chunk.length;
+      }
+      resolve(output);
+    });
   });
+  if (!fonts && typeof window !== "undefined") {
+    const responses = await Promise.all(
+      ["Regular", "Bold"].map((weight) =>
+        fetch(`/pdf/standard_fonts/LiberationSans-${weight}.ttf`),
+      ),
+    );
+    if (responses.some((response) => !response.ok))
+      throw new Error("Bundled PDF fonts could not be loaded.");
+    const [regular, bold] = await Promise.all(
+      responses.map((response) => response.arrayBuffer()),
+    );
+    fonts = { regular, bold };
+  }
+  if (fonts) {
+    doc
+      .registerFont("FinanceIQ", fonts.regular)
+      .registerFont("FinanceIQ-Bold", fonts.bold)
+      .font("FinanceIQ");
+  }
+  const money = (amount: number) =>
+    `INR ${amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  doc.fontSize(22).fillColor("#0f766e").text("FinanceIQ Financial Health Report");
-  doc.moveDown(0.5).fontSize(9).fillColor("#6b7280").text(`Generated ${report.generatedAt}`);
+  doc
+    .fontSize(22)
+    .fillColor("#0f766e")
+    .text("FinanceIQ Financial Health Report");
+  doc
+    .moveDown(0.5)
+    .fontSize(9)
+    .fillColor("#6b7280")
+    .text(`Generated ${report.generatedAt}`);
   doc.moveDown();
 
-  doc.fontSize(13).fillColor("#111827").text(`Health Score: ${report.health.score}/100 (${report.health.label})`);
-  doc.text(`Income: ${report.totals.income}`);
-  doc.text(`Expenses: ${report.totals.expenses}`);
-  doc.text(`Net Savings: ${report.totals.netSavings}`);
+  doc
+    .fontSize(13)
+    .fillColor("#111827")
+    .text(`Health Score: ${report.health.score}/100 (${report.health.label})`);
+  doc.text(`Income: ${money(report.totals.income)}`);
+  doc.text(`Expenses: ${money(report.totals.expenses)}`);
+  doc.text(`Net Savings: ${money(report.totals.netSavings)}`);
+  doc.text(
+    `Statement period: ${report.period.startDate} to ${report.period.endDate}`,
+  );
+  doc.text(
+    `Opening balance: ${money(report.balances.opening.amount)} (${report.balances.opening.source})`,
+  );
+  doc.text(
+    `Closing balance: ${money(report.balances.closing.amount)} (${report.balances.closing.source})`,
+  );
   doc.text(`Savings Rate: ${report.totals.savingsRate}%`);
   doc.moveDown();
 
   doc.fontSize(15).fillColor("#0f766e").text("Top Categories");
   doc.moveDown(0.4).fontSize(10).fillColor("#111827");
-  for (const category of report.categories.slice(0, 8)) {
-    doc.text(`${category.name}: ${category.amount} (${category.percent}%)`);
+  for (const category of report.categories) {
+    doc.text(
+      `${category.name}: ${money(category.amount)} (${category.percent}%)`,
+    );
   }
   doc.moveDown();
 
   doc.fontSize(15).fillColor("#0f766e").text("Alerts");
   doc.moveDown(0.4).fontSize(10).fillColor("#111827");
   for (const alert of report.alerts) {
-    doc.text(`${alert.severity.toUpperCase()} - ${alert.title}: ${alert.detail}`);
+    doc.text(
+      `${alert.severity.toUpperCase()} - ${alert.title}: ${alert.detail}`,
+    );
   }
   doc.moveDown();
 
-  doc.fontSize(15).fillColor("#0f766e").text("Recent Transactions");
+  doc.fontSize(15).fillColor("#0f766e").text("Statement Ledger");
   doc.moveDown(0.4).fontSize(8).fillColor("#111827");
-  for (const txn of report.transactions.slice(0, 60)) {
-    doc.text(`${txn.date} | ${txn.merchant} | ${txn.category} | ${txn.amount}`);
+  for (const txn of report.transactions) {
+    doc.text(
+      `${txn.date} | ${txn.merchant} | ${txn.category} | ${money(txn.amount)}${txn.isExcluded ? " | EXCLUDED" : ""}`,
+    );
+    doc.fillColor("#6b7280").text(txn.description).fillColor("#111827");
   }
 
   doc.end();

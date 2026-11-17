@@ -1,18 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
-export const MAX_FILES_PER_REQUEST = 5;
-
-const allowedExtensions = new Set(["pdf", "csv", "xlsx"]);
-const allowedMimeTypes = new Set([
-  "application/pdf",
-  "text/csv",
-  "application/csv",
-  "application/vnd.ms-excel",
-  "application/octet-stream",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-]);
+export {
+  MAX_FILE_SIZE_BYTES,
+  MAX_FILES_PER_REQUEST,
+  getExtension,
+  validateUploadFiles,
+} from "./upload-validation";
 
 type RateLimitBucket = {
   count: number;
@@ -20,6 +14,76 @@ type RateLimitBucket = {
 };
 
 const rateLimitStore = new Map<string, RateLimitBucket>();
+export const PRIVATE_HEADERS = {
+  "Cache-Control": "no-store",
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "no-referrer",
+};
+
+export class RequestError extends Error {
+  constructor(
+    message: string,
+    public readonly status = 400,
+  ) {
+    super(message);
+  }
+}
+
+/** Check the declared size AND streamed bytes, including chunked requests. */
+export async function readBoundedRequest(
+  request: Request,
+  contentType: string,
+  maxBytes: number,
+): Promise<Request> {
+  const origin = request.headers.get("origin");
+  if (origin && origin !== new URL(request.url).origin)
+    throw new RequestError("Cross-origin requests are not allowed.", 403);
+  if (request.headers.get("sec-fetch-site") === "cross-site")
+    throw new RequestError("Cross-site requests are not allowed.", 403);
+  if (
+    !request.headers.get("content-type")?.toLowerCase().startsWith(contentType)
+  )
+    throw new RequestError(`Use ${contentType} for this endpoint.`, 415);
+  const declared = request.headers.get("content-length");
+  if (declared && (!/^\d+$/.test(declared) || Number(declared) > maxBytes))
+    throw new RequestError("Request exceeds the endpoint size limit.", 413);
+  if (!request.body) throw new RequestError("A request body is required.");
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) {
+        await reader.cancel();
+        throw new RequestError("Request exceeds the endpoint size limit.", 413);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new Request(request.url, {
+    method: "POST",
+    headers: request.headers,
+    body: bytes,
+  });
+}
+
+export function requestErrorResponse(error: unknown) {
+  return errorResponse(
+    error instanceof RequestError ? error.message : "Invalid request body.",
+    error instanceof RequestError ? error.status : 400,
+  );
+}
 
 export type RateLimitOptions = {
   key: string;
@@ -29,8 +93,12 @@ export type RateLimitOptions = {
 
 export function rateLimit({ key, limit, windowMs }: RateLimitOptions) {
   const now = Date.now();
+  for (const [bucketKey, bucket] of rateLimitStore)
+    if (bucket.resetAt <= now) rateLimitStore.delete(bucketKey);
   const current = rateLimitStore.get(key);
   if (!current || current.resetAt <= now) {
+    if (rateLimitStore.size >= 10000)
+      return { allowed: false, remaining: 0, resetAt: now + windowMs };
     rateLimitStore.set(key, { count: 1, resetAt: now + windowMs });
     return { allowed: true, remaining: limit - 1, resetAt: now + windowMs };
   }
@@ -40,54 +108,51 @@ export function rateLimit({ key, limit, windowMs }: RateLimitOptions) {
   }
 
   current.count += 1;
-  return { allowed: true, remaining: limit - current.count, resetAt: current.resetAt };
+  return {
+    allowed: true,
+    remaining: limit - current.count,
+    resetAt: current.resetAt,
+  };
 }
 
 export function getClientIp(request: Request) {
-  const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwardedFor || request.headers.get("x-real-ip") || "anonymous";
+  if (process.env.VERCEL !== "1" && process.env.TRUST_PROXY_HEADERS !== "true")
+    return "anonymous";
+  const forwardedFor = request.headers
+    .get("x-forwarded-for")
+    ?.split(",")[0]
+    ?.trim();
+  return (
+    forwardedFor ||
+    request.headers.get("x-real-ip") ||
+    "anonymous"
+  ).slice(0, 100);
 }
 
-export function getExtension(fileName: string) {
-  return fileName.split(".").pop()?.toLowerCase() ?? "";
-}
-
-export function validateUploadFiles(files: File[]) {
-  if (files.length === 0) {
-    return { ok: false as const, message: "Please upload at least one PDF, CSV, or XLSX bank statement." };
-  }
-  if (files.length > MAX_FILES_PER_REQUEST) {
-    return { ok: false as const, message: `Upload up to ${MAX_FILES_PER_REQUEST} statements at a time.` };
-  }
-
-  for (const file of files) {
-    const extension = getExtension(file.name);
-    if (!allowedExtensions.has(extension)) {
-      return { ok: false as const, message: `${file.name} is not supported. Upload PDF, CSV, or XLSX files only.` };
-    }
-    if (file.size <= 0) {
-      return { ok: false as const, message: `${file.name} is empty. Please upload a valid bank statement.` };
-    }
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      return { ok: false as const, message: `${file.name} is larger than 10 MB.` };
-    }
-    if (file.type && !allowedMimeTypes.has(file.type)) {
-      return { ok: false as const, message: `${file.name} has an invalid file type.` };
-    }
-  }
-
-  return { ok: true as const };
-}
-
-export function errorResponse(message: string, status = 400, details?: unknown) {
-  return NextResponse.json({ error: { message, details } }, { status });
+export function errorResponse(
+  message: string,
+  status = 400,
+  details?: unknown,
+) {
+  return NextResponse.json(
+    { error: { message, details } },
+    { status, headers: PRIVATE_HEADERS },
+  );
 }
 
 export function validationErrorResponse(error: z.ZodError) {
-  return errorResponse("Invalid request payload.", 400, error.issues.map((issue) => ({ path: issue.path, message: issue.message })));
+  return errorResponse(
+    "Invalid request payload.",
+    400,
+    error.issues.map((issue) => ({ path: issue.path, message: issue.message })),
+  );
 }
 
-export function logEvent(level: "info" | "warn" | "error", message: string, details?: Record<string, unknown>) {
+export function logEvent(
+  level: "info" | "warn" | "error",
+  message: string,
+  details?: Record<string, unknown>,
+) {
   const payload = {
     level,
     message,

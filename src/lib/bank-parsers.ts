@@ -1,5 +1,10 @@
-import { type Transaction } from "./schemas";
-import { categorizeTransaction, isTransferTransaction } from "./categorizer";
+import type { Transaction } from "./schemas";
+import {
+  categorizeTransaction,
+  cleanDescription,
+  isTransferTransaction,
+} from "./categorizer";
+import { roundMoney } from "./money";
 
 export type RawParsedRow = {
   date: string;
@@ -22,389 +27,575 @@ export type ParseResult = {
   formatDetected: string;
 };
 
-export function parseMonetaryValue(val: unknown): number {
-  if (typeof val === "number") return isFinite(val) ? val : 0;
-  if (!val) return 0;
-  let str = String(val).trim();
-  if (str === "" || str === "-" || str.toLowerCase() === "nil") return 0;
-
-  const isDr = /\b(dr|debit)\b/i.test(str);
-  const isCr = /\b(cr|credit)\b/i.test(str);
-  const isParenNegative = /^\(.*\)$/.test(str);
-
-  // Remove currency signs, letters, commas, and parentheses
-  str = str.replace(/[₹$€£,()\s]/g, "").replace(/\b(dr|cr|debit|credit)\b/gi, "");
-
-  const num = parseFloat(str);
-  if (isNaN(num)) return 0;
-
-  if (isParenNegative || isDr) return -Math.abs(num);
-  if (isCr) return Math.abs(num);
-  return num;
+export function parseOptionalMonetaryValue(value: unknown): number | undefined {
+  if (typeof value === "number")
+    return Number.isFinite(value) ? roundMoney(value) : undefined;
+  if (value == null) return undefined;
+  const original = String(value).trim();
+  if (!original || /^(?:-|nil|n\/a)$/i.test(original)) return undefined;
+  const negative =
+    /^\(.*\)$/.test(original) || /(?:dr|debit)\s*$/i.test(original);
+  let text = original
+    .replace(/(?:dr|cr|debit|credit)\s*$/i, "")
+    .replace(/\b(?:INR|USD|EUR|GBP|RS\.?|AUD|CAD)\b/gi, "")
+    .replace(/[₹$€£()\s]/g, "");
+  // Accept decimal-comma statements as well as Indian/US digit grouping.
+  if (
+    text.includes(",") &&
+    text.includes(".") &&
+    text.lastIndexOf(",") > text.lastIndexOf(".")
+  ) {
+    text = text.replace(/\./g, "").replace(",", ".");
+  } else if (/^-?\d+,\d{1,2}$/.test(text)) {
+    text = text.replace(",", ".");
+  } else {
+    text = text.replace(/,/g, "");
+  }
+  if (!/^[+-]?\d+(?:\.\d+)?$/.test(text)) return undefined;
+  const amount = Number(text);
+  return Number.isFinite(amount)
+    ? roundMoney(negative ? -Math.abs(amount) : amount)
+    : undefined;
 }
 
-export function normalizeDateString(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed) return new Date().toISOString().slice(0, 10);
-
-  // Check ISO format YYYY-MM-DD
-  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
-    return trimmed.slice(0, 10);
-  }
-
-  // Handle DD-MMM-YYYY or DD/MMM/YYYY e.g., 05-May-2026 or 05-MAY-26
-  const monthMap: Record<string, string> = {
-    jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
-    jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
-  };
-  const namedMatch = trimmed.match(/^(\d{1,2})[-/ ]([A-Za-z]{3})[-/ ](\d{2,4})/);
-  if (namedMatch) {
-    const day = namedMatch[1].padStart(2, "0");
-    const month = monthMap[namedMatch[2].toLowerCase()] || "01";
-    let year = namedMatch[3];
-    if (year.length === 2) year = `20${year}`;
-    return `${year}-${month}-${day}`;
-  }
-
-  // Handle DD/MM/YYYY or MM/DD/YYYY or DD-MM-YYYY
-  const parts = trimmed.split(/[/.-]/).map(p => p.trim());
-  if (parts.length >= 3) {
-    const [p1, p2, p3] = parts;
-    if (p1.length === 4) {
-      // YYYY/MM/DD
-      return `${p1}-${p2.padStart(2, "0")}-${p3.padStart(2, "0")}`;
-    }
-    let year = p3;
-    if (year.length === 2) year = `20${year}`;
-
-    // Common standard for bank statements: DD/MM/YYYY
-    const day = p1.padStart(2, "0");
-    const month = p2.padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }
-
-  return new Date().toISOString().slice(0, 10);
+export function parseMonetaryValue(value: unknown): number {
+  return parseOptionalMonetaryValue(value) ?? 0;
 }
 
+/** Reverse descending statement rows before a stable date sort. For a single
+ * date, use observed balance continuity rather than arbitrarily reordering. */
+export function chronologicalTransactions(
+  transactions: Transaction[],
+): Transaction[] {
+  let ordered = [...transactions];
+  const first = ordered[0];
+  const last = ordered[ordered.length - 1];
+  if (first && last && first.date > last.date) ordered.reverse();
+  ordered.sort((a, b) => a.date.localeCompare(b.date));
+  if (
+    first &&
+    last &&
+    first.date === last.date &&
+    ordered.every((t) => t.date === first.date)
+  ) {
+    const score = (rows: Transaction[]) =>
+      rows.reduce((sum, row, index) => {
+        const previous = rows[index - 1];
+        return (
+          sum +
+          (previous?.runningBalance !== undefined &&
+          row.runningBalance !== undefined &&
+          Math.abs(
+            roundMoney(previous.runningBalance + row.amount) -
+              row.runningBalance,
+          ) <= 0.01
+            ? 1
+            : 0)
+        );
+      }, 0);
+    const reversed = [...ordered].reverse();
+    if (score(reversed) > score(ordered)) ordered = reversed;
+  }
+  return ordered;
+}
+
+type DateOrder = "DMY" | "MDY";
+const months = [
+  "jan",
+  "feb",
+  "mar",
+  "apr",
+  "may",
+  "jun",
+  "jul",
+  "aug",
+  "sep",
+  "oct",
+  "nov",
+  "dec",
+];
+
+function validDate(year: number, month: number, day: number): string {
+  if (
+    year < 1900 ||
+    year > 9999 ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31
+  )
+    return "";
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+    ? date.toISOString().slice(0, 10)
+    : "";
+}
+
+export function normalizeDateString(
+  raw: string,
+  order: DateOrder = "DMY",
+): string {
+  const text = raw.trim();
+  const iso = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:$|[T\s])/);
+  if (iso) return validDate(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+  const named = text.match(/^(\d{1,2})[-/\s]([A-Za-z]{3})[-/\s](\d{2}|\d{4})$/);
+  const usNamed = text.match(/^([A-Za-z]{3})\s+(\d{1,2}),?\s+(\d{4})$/);
+  if (named || usNamed) {
+    const match = named ?? usNamed!;
+    const month =
+      months.indexOf((named ? match[2] : match[1]).toLowerCase()) + 1;
+    const day = Number(named ? match[1] : match[2]);
+    let year = Number(match[3]);
+    if (year < 100) year += year >= 70 ? 1900 : 2000;
+    return validDate(year, month, day);
+  }
+  const numeric = text.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/);
+  if (numeric) {
+    let year = Number(numeric[3]);
+    if (year < 100) year += year >= 70 ? 1900 : 2000;
+    const first = Number(numeric[1]);
+    const second = Number(numeric[2]);
+    const useUS = order === "MDY" || (second > 12 && first <= 12);
+    return validDate(year, useUS ? first : second, useUS ? second : first);
+  }
+  // Excel serial dates use the 1899-12-30 epoch (including its leap-year quirk).
+  if (/^\d{5}(?:\.\d+)?$/.test(text)) {
+    const serial = Number(text);
+    if (serial >= 1 && serial <= 100000)
+      return new Date(Date.UTC(1899, 11, 30) + Math.floor(serial) * 86400000)
+        .toISOString()
+        .slice(0, 10);
+  }
+  return "";
+}
+
+function delimiterCounts(line: string): Record<string, number> {
+  const counts: Record<string, number> = { ",": 0, ";": 0, "\t": 0, "|": 0 };
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] === '"') {
+      if (quoted && line[i + 1] === '"') i++;
+      else quoted = !quoted;
+    } else if (!quoted && line[i] in counts) counts[line[i]]++;
+  }
+  return counts;
+}
+
+/** RFC-style CSV parsing, including quoted newlines and a statement preamble. */
 export function parseCsvRows(csvText: string): string[][] {
+  let text = csvText.replace(/^\uFEFF/, "");
+  const separator = text.match(/^sep=(.)\r?\n/i);
+  if (separator) text = text.slice(separator[0].length);
+  const candidates = text
+    .split(/\r?\n/)
+    .slice(0, 25)
+    .filter((line) => line.trim());
+  const header = candidates.find(
+    (line) =>
+      /date|txn dt/i.test(line) &&
+      /amount|debit|credit|withdrawal|money out|paid out/i.test(line),
+  );
+  const counts = delimiterCounts(
+    header ??
+      candidates.reduce(
+        (best, line) =>
+          Math.max(...Object.values(delimiterCounts(line))) >
+          Math.max(...Object.values(delimiterCounts(best)))
+            ? line
+            : best,
+        "",
+      ),
+  );
+  const delimiter =
+    separator?.[1] ?? Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
   const rows: string[][] = [];
-  const lines = csvText.split(/\r?\n/);
-  
-  // Detect delimiter: comma, semicolon, tab, pipe
-  const firstLine = lines.find(l => l.trim().length > 0) || "";
-  let delimiter = ",";
-  const counts = {
-    ",": (firstLine.match(/,/g) || []).length,
-    ";": (firstLine.match(/;/g) || []).length,
-    "\t": (firstLine.match(/\t/g) || []).length,
-    "|": (firstLine.match(/\|/g) || []).length,
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+  const finishRow = () => {
+    row.push(cell.trim());
+    if (row.some((value) => value.length)) rows.push(row);
+    row = [];
+    cell = "";
   };
-  const max = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
-  if (max && max[1] > 0) delimiter = max[0];
-
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    
-    // Parse quotes-aware CSV row
-    const row: string[] = [];
-    let insideQuotes = false;
-    let currentCell = "";
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      if (char === '"') {
-        if (insideQuotes && line[i + 1] === '"') {
-          currentCell += '"';
-          i++;
-        } else {
-          insideQuotes = !insideQuotes;
-        }
-      } else if (char === delimiter && !insideQuotes) {
-        row.push(currentCell.trim());
-        currentCell = "";
-      } else {
-        currentCell += char;
-      }
-    }
-    row.push(currentCell.trim());
-    if (row.some(c => c.length > 0)) {
-      rows.push(row);
-    }
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '"') {
+      if (quoted && text[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else quoted = !quoted;
+    } else if (char === delimiter && !quoted) {
+      row.push(cell.trim());
+      cell = "";
+    } else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && text[i + 1] === "\n") i++;
+      finishRow();
+    } else cell += char;
   }
-
+  if (quoted) throw new Error("The CSV contains an unterminated quoted cell.");
+  if (cell.length || row.length) finishRow();
   return rows;
 }
 
 export function detectColumnIndices(headers: string[]) {
-  const hLower = headers.map(h => h.toLowerCase().trim());
-  let dateIdx = -1;
-  let descIdx = -1;
-  let debitIdx = -1;
-  let creditIdx = -1;
-  let amountIdx = -1;
-  let balanceIdx = -1;
-  let refIdx = -1;
-  let typeIdx = -1;
-
-  for (let i = 0; i < hLower.length; i++) {
-    const col = hLower[i];
-    if (dateIdx === -1 && (col.includes("date") || col === "dt" || col === "value dt" || col === "txn date")) {
-      dateIdx = i;
-    } else if (descIdx === -1 && (col.includes("description") || col.includes("narration") || col.includes("particulars") || col.includes("remarks") || col.includes("details") || col === "merchant")) {
-      descIdx = i;
-    } else if (debitIdx === -1 && (col.includes("withdrawal") || col.includes("debit") || col === "dr" || col === "dr amount")) {
-      debitIdx = i;
-    } else if (creditIdx === -1 && (col.includes("deposit") || col.includes("credit") || col === "cr" || col === "cr amount")) {
-      creditIdx = i;
-    } else if (amountIdx === -1 && (col === "amount" || col.includes("txn amount") || col === "net amount")) {
-      amountIdx = i;
-    } else if (balanceIdx === -1 && (col.includes("balance") || col === "closing bal" || col === "bal")) {
-      balanceIdx = i;
-    } else if (refIdx === -1 && (col.includes("ref") || col.includes("chq") || col.includes("cheque") || col.includes("reference") || col.includes("utr"))) {
-      refIdx = i;
-    } else if (typeIdx === -1 && (col === "type" || col === "txn type" || col === "dr/cr")) {
-      typeIdx = i;
-    }
-  }
-
-  return { dateIdx, descIdx, debitIdx, creditIdx, amountIdx, balanceIdx, refIdx, typeIdx };
+  const columns = {
+    dateIdx: -1,
+    descIdx: -1,
+    debitIdx: -1,
+    creditIdx: -1,
+    amountIdx: -1,
+    balanceIdx: -1,
+    refIdx: -1,
+    typeIdx: -1,
+    categoryIdx: -1,
+    excludedIdx: -1,
+  };
+  headers.forEach((header, i) => {
+    const col = header
+      .toLowerCase()
+      .replace(/[_.]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    // "Debit balance" is a balance, and "Debit/Credit" is a direction flag.
+    if (/balance|closing bal|^bal$/.test(col) && columns.balanceIdx < 0)
+      columns.balanceIdx = i;
+    else if (
+      /^(?:type|txn type|transaction type|dr\s*\/\s*cr|debit\s*\/\s*credit)$/.test(
+        col,
+      )
+    )
+      columns.typeIdx = i;
+    else if (/date|^(?:dt|value dt|txn dt)$/.test(col) && columns.dateIdx < 0)
+      columns.dateIdx = i;
+    else if (
+      /description|narration|particulars|remarks|details/.test(col) &&
+      (columns.descIdx < 0 || /^merchant$/i.test(headers[columns.descIdx]))
+    )
+      columns.descIdx = i;
+    else if (col === "merchant" && columns.descIdx < 0) columns.descIdx = i;
+    else if (
+      /withdrawal|debit|^dr(?: amount)?$|money out|paid out/.test(col) &&
+      columns.debitIdx < 0
+    )
+      columns.debitIdx = i;
+    else if (
+      /deposit|credit|^cr(?: amount)?$|money in|paid in/.test(col) &&
+      columns.creditIdx < 0
+    )
+      columns.creditIdx = i;
+    else if (/^(?:amount|txn amount|transaction amount|net amount)$/.test(col))
+      columns.amountIdx = i;
+    else if (/ref|chq|cheque|utr/.test(col) && columns.refIdx < 0)
+      columns.refIdx = i;
+    else if (col === "category") columns.categoryIdx = i;
+    else if (/^(?:excluded|is excluded)$/.test(col)) columns.excludedIdx = i;
+  });
+  return columns;
 }
 
-export function parseStructuredTable(rows: string[][], filename = "statement.csv"): ParseResult {
-  if (rows.length === 0) {
-    return { transactions: [], duplicateCount: 0, transferCount: 0, formatDetected: "Empty" };
-  }
+function isTableHeader(row: string[]): boolean {
+  const c = detectColumnIndices(row);
+  return (
+    c.dateIdx >= 0 &&
+    c.descIdx >= 0 &&
+    (c.amountIdx >= 0 || c.debitIdx >= 0 || c.creditIdx >= 0)
+  );
+}
 
-  // Find header row (usually contains "date", "description" or "narration", etc.)
-  let headerRowIndex = -1;
-  for (let i = 0; i < Math.min(rows.length, 25); i++) {
-    const rowStr = rows[i].join(" ").toLowerCase();
-    if (rowStr.includes("date") && (rowStr.includes("amount") || rowStr.includes("debit") || rowStr.includes("withdrawal") || rowStr.includes("narration") || rowStr.includes("description") || rowStr.includes("particulars"))) {
-      headerRowIndex = i;
+export function transactionFingerprint(transaction: Transaction): string {
+  if (transaction.reference.trim())
+    return [
+      transaction.date,
+      Math.round(transaction.amount * 100),
+      transaction.reference.trim().toLowerCase(),
+    ].join("|");
+  return [
+    transaction.date,
+    Math.round(transaction.amount * 100),
+    transaction.description.toLowerCase().replace(/\s+/g, " "),
+    transaction.reference,
+    transaction.runningBalance ?? "",
+  ].join("|");
+}
+
+function makeTransaction(
+  row: RawParsedRow,
+  filename: string,
+  category?: string,
+  excluded = false,
+): Transaction {
+  const info = categorizeTransaction(row.description, row.amount);
+  const transfer =
+    isTransferTransaction(row.description, category) || info.isTransfer;
+  return {
+    id: `txn_${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`}`,
+    date: row.date,
+    description: cleanDescription(row.description),
+    merchant: info.merchant,
+    debit: row.debit,
+    credit: row.credit,
+    amount: row.amount,
+    type: transfer ? "transfer" : row.amount > 0 ? "income" : "expense",
+    category: category || info.category,
+    subcategory: info.subcategory,
+    paymentMethod: /upi/i.test(row.description)
+      ? "UPI"
+      : /pos|card/i.test(row.description)
+        ? "Debit Card"
+        : "Bank Transfer",
+    account: "Primary Account",
+    reference: row.reference ?? "",
+    runningBalance: row.runningBalance,
+    importSource: filename,
+    confidence: info.confidence,
+    isReviewed: Boolean(category),
+    isExcluded: excluded,
+    notes: "",
+  };
+}
+
+const summaryDescription =
+  /^(?:opening balance|closing balance|brought forward|carried forward|grand total|total(?:s)?(?:\s+(?:debits?|credits?|withdrawals?|deposits?|amount))?)\s*[:.-]?$/i;
+
+export function parseStructuredTable(
+  rows: string[][],
+  filename = "statement.csv",
+): ParseResult {
+  const headerIndex = rows.slice(0, 25).findIndex(isTableHeader);
+  if (headerIndex < 0)
+    return parseGenericBankText(
+      rows.map((r) => r.join(" ")).join("\n"),
+      filename,
+      false,
+    );
+  const c = detectColumnIndices(rows[headerIndex]);
+  let order: DateOrder = /chase|bank.of.america|\bboa\b/i.test(filename)
+    ? "MDY"
+    : "DMY";
+  for (const row of rows.slice(headerIndex + 1)) {
+    const match = row[c.dateIdx]?.match(/^(\d{1,2})[/-](\d{1,2})[/-]\d{2,4}$/);
+    if (match && Number(match[1]) > 12) {
+      order = "DMY";
+      break;
+    }
+    if (match && Number(match[2]) > 12) {
+      order = "MDY";
       break;
     }
   }
-
-  if (headerRowIndex === -1) {
-    // Fallback: treat as raw text rows
-    return parseGenericBankText(rows.map(r => r.join(" ")).join("\n"), filename);
-  }
-
-  const headers = rows[headerRowIndex];
-  const { dateIdx, descIdx, debitIdx, creditIdx, amountIdx, balanceIdx, refIdx, typeIdx } = detectColumnIndices(headers);
-
   const transactions: Transaction[] = [];
-  const seenHashes = new Set<string>();
+  const seenReferences = new Set<string>();
   let duplicateCount = 0;
-  let transferCount = 0;
-  let observedOpening: number | undefined;
-  let observedClosing: number | undefined;
-
-  for (let i = headerRowIndex + 1; i < rows.length; i++) {
-    const row = rows[i];
-    if (row.length <= Math.max(dateIdx, descIdx)) continue;
-
-    const rawDate = dateIdx >= 0 ? row[dateIdx] : "";
-    const rawDesc = descIdx >= 0 ? row[descIdx] : "";
-    if (!rawDate || !rawDesc) continue;
-
-    // Verify it has date-like characteristics
-    if (!/\d/.test(rawDate)) continue;
-
-    const date = normalizeDateString(rawDate);
-    const reference = refIdx >= 0 ? row[refIdx] : "";
-    const runningBal = balanceIdx >= 0 ? parseMonetaryValue(row[balanceIdx]) : undefined;
-
-    if (runningBal !== undefined) {
-      if (observedOpening === undefined) observedOpening = runningBal;
-      observedClosing = runningBal;
-    }
-
+  let opening: number | undefined;
+  let closing: number | undefined;
+  for (const row of rows.slice(headerIndex + 1)) {
+    if (isTableHeader(row)) continue;
+    const description = row[c.descIdx]?.trim() ?? "";
+    const balanceCell =
+      c.balanceIdx >= 0 ? row[c.balanceIdx]?.trim() : undefined;
+    const balance = parseOptionalMonetaryValue(balanceCell);
+    if (
+      /^opening balance\s*[:.-]?$/i.test(description) &&
+      balance !== undefined
+    )
+      opening = balance;
+    if (
+      /^closing balance\s*[:.-]?$/i.test(description) &&
+      balance !== undefined
+    )
+      closing = balance;
+    const date = normalizeDateString(row[c.dateIdx] ?? "", order);
+    if (!date || !description || summaryDescription.test(description)) continue;
     let debit = 0;
     let credit = 0;
-    let netAmount = 0;
-
-    if (debitIdx >= 0 || creditIdx >= 0) {
-      const rawDebit = debitIdx >= 0 ? parseMonetaryValue(row[debitIdx]) : 0;
-      const rawCredit = creditIdx >= 0 ? parseMonetaryValue(row[creditIdx]) : 0;
-      debit = Math.abs(rawDebit);
-      credit = Math.abs(rawCredit);
-      netAmount = credit > 0 ? credit : -debit;
-    } else if (amountIdx >= 0) {
-      const parsedAmt = parseMonetaryValue(row[amountIdx]);
-      if (typeIdx >= 0) {
-        const typeStr = (row[typeIdx] || "").toLowerCase();
-        if (typeStr.includes("dr") || typeStr.includes("debit")) {
-          debit = Math.abs(parsedAmt);
-          netAmount = -debit;
-        } else {
-          credit = Math.abs(parsedAmt);
-          netAmount = credit;
-        }
-      } else {
-        if (parsedAmt < 0) {
-          debit = Math.abs(parsedAmt);
-          netAmount = parsedAmt;
-        } else {
-          credit = parsedAmt;
-          netAmount = parsedAmt;
-        }
-      }
+    let amount = 0;
+    if (c.debitIdx >= 0 || c.creditIdx >= 0) {
+      debit = Math.abs(parseMonetaryValue(row[c.debitIdx]));
+      credit = Math.abs(parseMonetaryValue(row[c.creditIdx]));
+      amount = roundMoney(credit - debit);
+    } else {
+      amount = parseMonetaryValue(row[c.amountIdx]);
+      const direction = row[c.typeIdx]?.trim() ?? "";
+      if (/^(?:dr\.?|d|debit|expense|withdrawal|payment)$/i.test(direction))
+        amount = -Math.abs(amount);
+      if (/^(?:cr\.?|c|credit|income|deposit)$/i.test(direction))
+        amount = Math.abs(amount);
+      debit = amount < 0 ? -amount : 0;
+      credit = amount > 0 ? amount : 0;
     }
-
-    // Skip zero amount or summary rows
-    if (debit === 0 && credit === 0 && netAmount === 0) continue;
-    if (/total|closing balance|opening balance|brought forward|carried forward/i.test(rawDesc)) continue;
-
-    // Check duplicate hash
-    const txnHash = `${date}|${netAmount}|${rawDesc.slice(0, 30).toLowerCase()}|${reference}`;
-    if (seenHashes.has(txnHash)) {
+    if (!amount) continue;
+    const category = c.categoryIdx >= 0 ? row[c.categoryIdx] : undefined;
+    const reference = c.refIdx >= 0 ? (row[c.refIdx] ?? "") : "";
+    const transaction = makeTransaction(
+      {
+        date,
+        description,
+        debit,
+        credit,
+        amount,
+        reference,
+        runningBalance: balance,
+      },
+      filename,
+      category,
+      /^(?:true|1|yes)$/i.test(row[c.excludedIdx] ?? ""),
+    );
+    // Equal cash purchases on the same day are legitimate. Only collapse a
+    // repeated bank reference inside one statement; cross-file dedupe is separate.
+    const referenceKey = `${date}|${amount}|${reference}`;
+    if (reference && seenReferences.has(referenceKey)) {
       duplicateCount++;
       continue;
     }
-    seenHashes.add(txnHash);
-
-    const isTransfer = isTransferTransaction(rawDesc);
-    if (isTransfer) transferCount++;
-
-    const catInfo = categorizeTransaction(rawDesc, netAmount);
-
-    transactions.push({
-      id: `txn_${i}_${Date.now().toString(36)}_${Math.abs(netAmount)}`,
-      date,
-      description: rawDesc,
-      merchant: catInfo.merchant,
-      debit,
-      credit,
-      amount: netAmount,
-      type: isTransfer ? "transfer" : netAmount >= 0 ? "income" : "expense",
-      category: catInfo.category,
-      subcategory: catInfo.subcategory,
-      paymentMethod: /upi/i.test(rawDesc) ? "UPI" : /pos|card/i.test(rawDesc) ? "Debit Card" : /neft|rtgs|imps/i.test(rawDesc) ? "Net Banking" : "Bank Transfer",
-      account: "Primary Account",
-      reference,
-      runningBalance: runningBal,
-      importSource: filename,
-      confidence: catInfo.confidence,
-      isReviewed: false,
-      isExcluded: false,
-      notes: "",
-    });
+    if (reference) seenReferences.add(referenceKey);
+    transactions.push(transaction);
   }
-
-  // Sort chronologically
-  transactions.sort((a, b) => a.date.localeCompare(b.date));
-
+  transactions.splice(
+    0,
+    transactions.length,
+    ...chronologicalTransactions(transactions),
+  );
   return {
     transactions,
-    observedOpeningBalance: observedOpening,
-    observedClosingBalance: observedClosing,
+    observedOpeningBalance: opening,
+    observedClosingBalance:
+      closing ??
+      transactions.findLast((t) => t.runningBalance !== undefined)
+        ?.runningBalance,
     duplicateCount,
-    transferCount,
+    transferCount: transactions.filter((t) => t.type === "transfer").length,
     formatDetected: "Structured Statement (Table Profile)",
   };
 }
 
-export function parseGenericBankText(text: string, filename = "statement.txt"): ParseResult {
-  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+const datePattern =
+  /\b(?:\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{1,2}[-/\s][A-Za-z]{3}[-/\s]\d{2,4})\b/g;
+const moneyPattern =
+  /(?<![\w/])(?:[₹$€£]\s*)?[+-]?\(?\d[\d,]*(?:\.\d{1,2})?\)?(?:\s*(?:CR|DR)\b)?(?![\w/.-])/gi;
+
+export function parseGenericBankText(
+  text: string,
+  filename = "statement.txt",
+  inferTable = true,
+): ParseResult {
+  if (inferTable && /[,;\t|]/.test(text)) {
+    const rows = parseCsvRows(text);
+    if (rows.slice(0, 25).some(isTableHeader))
+      return parseStructuredTable(rows, filename);
+  }
   const transactions: Transaction[] = [];
-  const seenHashes = new Set<string>();
+  const seenReferences = new Set<string>();
   let duplicateCount = 0;
-  let transferCount = 0;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    // Look for date pattern at start or within line
-    const dateMatch = line.match(/\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}\s+[A-Za-z]{3}\s+\d{2,4})\b/);
-    if (!dateMatch) continue;
-
-    // Strip date string before looking for amounts so date components aren't matched as amounts
-    const lineWithoutDate = line.replace(dateMatch[0], " ").trim();
-
-    // Look for numbers that represent amounts
-    const amountMatches = [...lineWithoutDate.matchAll(/-?\b\d+(?:,\d+)*(?:\.\d+)?\b/g)]
-      .map(m => m[0].replace(/,/g, ""))
-      .filter(m => !isNaN(parseFloat(m)) && parseFloat(m) > 0);
-
-    if (amountMatches.length === 0) continue;
-
-    const date = normalizeDateString(dateMatch[0]);
-
-    // Check if line indicates debit or credit
-    const isCredit = /\b(credit|cr\b|deposit|salary|refund|interest|cr\.)/i.test(line);
-    const isDebit = /\b(debit|dr\b|withdrawal|paid|spent|purchase|dr\.)/i.test(line);
-
-    // If there is 1 number, it's the amount.
-    // If there are multiple numbers, usually [amount, runningBalance] or [refNo, amount, runningBalance]
-    let rawAmount = parseFloat(amountMatches[amountMatches.length - 1]);
+  let opening: number | undefined;
+  let closing: number | undefined;
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    const summary = line.match(/^(opening|closing) balance\s*[:\s]+(.+)$/i);
+    if (summary) {
+      if (summary[1].toLowerCase() === "opening")
+        opening = parseOptionalMonetaryValue(summary[2]);
+      else closing = parseOptionalMonetaryValue(summary[2]);
+      continue;
+    }
+    const dates = [...line.matchAll(datePattern)];
+    if (!dates.length) continue;
+    const date = normalizeDateString(dates[0][0]);
+    if (!date) continue;
+    let rest = line.replace(datePattern, " ").trim();
+    const referenceMatch = rest.match(
+      /\b(?:ref(?:erence)?|utr|chq)\s*[:#/-]?\s*([A-Za-z0-9-]{3,})/i,
+    );
+    const reference = referenceMatch?.[1] ?? "";
+    if (referenceMatch) rest = rest.replace(referenceMatch[0], " ");
+    const matches = [...rest.matchAll(moneyPattern)];
+    if (!matches.length) continue;
+    const explicit = rest.match(
+      /\b(?:credit|cr|debit|dr|withdrawal|deposit|amount)\s+(?:INR\s*)?([₹$€£]?\s*[+-]?\d[\d,]*(?:\.\d{1,2})?)/i,
+    );
+    let amountMatch = matches[matches.length - 1];
     let runningBalance: number | undefined;
-
-    if (amountMatches.length >= 2) {
-      // If the last number looks like running balance (often large) and penultimate is amount
-      rawAmount = parseFloat(amountMatches[amountMatches.length - 1]);
-      // If debit/credit is explicitly followed by amount (e.g. "credit 120000"), amount is after that word
-      const crDrMatch = lineWithoutDate.match(/\b(?:credit|cr|debit|dr|withdrawal|deposit)\s+(\d+(?:,\d+)*(?:\.\d+)?)/i);
-      if (crDrMatch) {
-        rawAmount = parseFloat(crDrMatch[1].replace(/,/g, ""));
+    if (explicit) {
+      amountMatch =
+        matches.find(
+          (m) =>
+            m.index! >= explicit.index! && m[0].trim() === explicit[1].trim(),
+        ) ?? amountMatch;
+      const last = matches[matches.length - 1];
+      if (last.index! > amountMatch.index!)
+        runningBalance = parseMonetaryValue(last[0]);
+    } else if (matches.length >= 2) {
+      // Text statements generally end in amount, balance. Ignore a standalone
+      // numeric reference when there is only one decimal/currency amount.
+      const monetary = matches.filter((m) =>
+        /[.,₹$€£]|[+-]|\b(?:CR|DR)\b/i.test(m[0]),
+      );
+      if (monetary.length === 1 && matches.length === 2)
+        amountMatch = monetary[0];
+      else {
+        amountMatch = matches[matches.length - 2];
+        runningBalance = parseMonetaryValue(matches[matches.length - 1][0]);
+        if (parseMonetaryValue(amountMatch[0]) === 0 && matches.length >= 3)
+          amountMatch = matches[matches.length - 3];
       }
     }
-
-    if (rawAmount === 0) continue;
-
-    const netAmount = isCredit && !isDebit ? Math.abs(rawAmount) : -Math.abs(rawAmount);
-
-    // Extract description by removing date and numeric amounts
-    let desc = line
-      .replace(dateMatch[0], "")
-      .replace(new RegExp(String(rawAmount), "g"), "")
-      .trim();
-
-    if (runningBalance) {
-      desc = desc.replace(new RegExp(String(runningBalance), "g"), "").trim();
-    }
-    if (!desc) desc = `Transaction ${i + 1}`;
-
-    const txnHash = `${date}|${netAmount}|${desc.slice(0, 30).toLowerCase()}`;
-    if (seenHashes.has(txnHash)) {
+    const rawAmount = parseMonetaryValue(amountMatch[0]);
+    if (!rawAmount) continue;
+    const directionText = rest.slice(
+      0,
+      amountMatch.index! + amountMatch[0].length,
+    );
+    const isCredit =
+      /\b(?:credit|cr|deposit|salary|payroll|refund|interest)\b/i.test(
+        directionText,
+      ) || /^\+/.test(amountMatch[0]);
+    const isDebit =
+      /\b(?:debit|dr|withdrawal|paid|spent|purchase)\b/i.test(directionText) ||
+      rawAmount < 0;
+    const amount =
+      isCredit && !isDebit ? Math.abs(rawAmount) : -Math.abs(rawAmount);
+    const description = cleanDescription(
+      rest
+        .slice(0, amountMatch.index)
+        .replace(/\b(?:amount|balance)\s*[:.-]?\s*$/i, ""),
+    );
+    if (!description || summaryDescription.test(description)) continue;
+    const transaction = makeTransaction(
+      {
+        date,
+        description,
+        debit: amount < 0 ? -amount : 0,
+        credit: amount > 0 ? amount : 0,
+        amount,
+        reference,
+        runningBalance,
+      },
+      filename,
+    );
+    const key = `${date}|${amount}|${reference}`;
+    if (reference && seenReferences.has(key)) {
       duplicateCount++;
       continue;
     }
-    seenHashes.add(txnHash);
-
-    const isTransfer = isTransferTransaction(desc);
-    if (isTransfer) transferCount++;
-
-    const catInfo = categorizeTransaction(desc, netAmount);
-
-    transactions.push({
-      id: `txn_${i}_${Date.now().toString(36)}_${Math.abs(netAmount)}`,
-      date,
-      description: desc,
-      merchant: catInfo.merchant,
-      debit: netAmount < 0 ? Math.abs(netAmount) : 0,
-      credit: netAmount > 0 ? netAmount : 0,
-      amount: netAmount,
-      type: isTransfer ? "transfer" : netAmount >= 0 ? "income" : "expense",
-      category: catInfo.category,
-      subcategory: catInfo.subcategory,
-      paymentMethod: /upi/i.test(desc) ? "UPI" : "Bank Transfer",
-      account: "Primary Account",
-      reference: "",
-      runningBalance,
-      importSource: filename,
-      confidence: catInfo.confidence,
-      isReviewed: false,
-      isExcluded: false,
-      notes: "",
-    });
+    if (reference) seenReferences.add(key);
+    transactions.push(transaction);
   }
-
-  transactions.sort((a, b) => a.date.localeCompare(b.date));
-
+  transactions.splice(
+    0,
+    transactions.length,
+    ...chronologicalTransactions(transactions),
+  );
   return {
     transactions,
+    observedOpeningBalance: opening,
+    observedClosingBalance:
+      closing ??
+      transactions.findLast((t) => t.runningBalance !== undefined)
+        ?.runningBalance,
     duplicateCount,
-    transferCount,
-    formatDetected: "Text Statement (Regex Pattern)",
+    transferCount: transactions.filter((t) => t.type === "transfer").length,
+    formatDetected: "Text Statement (Date / Amount / Balance)",
   };
 }

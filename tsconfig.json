@@ -26,6 +26,9 @@
     "next-env.d.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
+    "scripts/**/*.ts",
+    "tests/**/*.ts",
+    "playwright.config.ts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"

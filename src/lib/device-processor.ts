@@ -1,159 +1,116 @@
-import { type InsightReport, type Transaction } from "./schemas";
-import { parseCsvRows, parseStructuredTable, parseGenericBankText } from "./bank-parsers";
+import {
+  insightReportSchema,
+  type InsightReport,
+  type Transaction,
+} from "./schemas";
+import {
+  parseCsvRows,
+  parseStructuredTable,
+  parseGenericBankText,
+  type ParseResult,
+} from "./bank-parsers";
 import { buildReport } from "./finance-engine";
 import { LocalFinanceDatabase } from "./local-storage";
+import { categorizeTransaction } from "./categorizer";
+import { validateUploadFiles } from "./upload-validation";
+import { mergeStatements } from "./statement-import";
 
 export type ProgressCallback = (step: string, percentage: number) => void;
 
 export class DeviceStatementProcessor {
-  /**
-   * Processes bank statements 100% locally on device CPU and memory.
-   * Never uploads raw documents to Render or external servers.
-   */
   static async processFilesLocally(
     files: File[],
     onProgress?: ProgressCallback,
-  ): Promise<{ report: InsightReport; transactions: Transaction[]; isLocal: boolean }> {
+    options: { pdfPassword?: string } = {},
+  ): Promise<{
+    report: InsightReport;
+    transactions: Transaction[];
+    isLocal: boolean;
+  }> {
+    const validation = validateUploadFiles(files);
+    if (!validation.ok) throw new Error(validation.message);
+    const results: ParseResult[] = [];
     onProgress?.("Reading local files...", 10);
-
-    let allTransactions: Transaction[] = [];
-    const fileNames: string[] = [];
-
-    for (let fIdx = 0; fIdx < files.length; fIdx++) {
-      const file = files[fIdx];
-      fileNames.push(file.name);
+    for (let index = 0; index < files.length; index++) {
+      const file = files[index];
+      onProgress?.(
+        `Parsing ${file.name} locally...`,
+        15 + Math.round((index / files.length) * 40),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      let parsed: ParseResult;
       const name = file.name.toLowerCase();
-
-      onProgress?.(`Parsing ${file.name} locally...`, 20 + Math.round((fIdx / files.length) * 30));
-
-      let fileTxns: Transaction[] = [];
-
-      if (name.endsWith(".csv")) {
-        const text = await file.text();
-        const rows = parseCsvRows(text);
-        const parsed = parseStructuredTable(rows, file.name);
-        fileTxns = parsed.transactions;
-      } else if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
-        fileTxns = await this.parseExcelLocally(file);
-      } else if (name.endsWith(".pdf")) {
-        fileTxns = await this.parsePdfLocally(file);
-      } else {
-        // Plain text fallback
-        const text = await file.text();
-        const parsed = parseGenericBankText(text, file.name);
-        fileTxns = parsed.transactions;
+      try {
+        if (name.endsWith(".csv"))
+          parsed = parseStructuredTable(
+            parseCsvRows(await file.text()),
+            file.name,
+          );
+        else if (name.endsWith(".xlsx"))
+          parsed = await (
+            await import("./spreadsheet-parser")
+          ).readExcelStatement(file);
+        else if (name.endsWith(".pdf"))
+          parsed = await (
+            await import("./pdf-parser")
+          ).readPdfStatement(file, options.pdfPassword, (step) =>
+            onProgress?.(step, 20 + Math.round((index / files.length) * 40)),
+          );
+        else parsed = parseGenericBankText(await file.text(), file.name);
+      } catch (error) {
+        throw new Error(
+          `${file.name}: ${error instanceof Error ? error.message : "Could not read this statement."}`,
+        );
       }
-
-      allTransactions = [...allTransactions, ...fileTxns];
+      if (!parsed.transactions.length)
+        throw new Error(
+          `No transactions were found in ${file.name}. Check its dates and amount columns or try the bank's CSV/XLSX export.`,
+        );
+      results.push(parsed);
     }
-
-    if (allTransactions.length === 0) {
-      throw new Error("No transactions could be extracted from the selected files. Please check that the file is an unencrypted text or spreadsheet bank statement.");
-    }
-
-    onProgress?.("Deduplicating & normalizing transactions...", 60);
-    // Deduplicate across files
-    const uniqueMap = new Map<string, Transaction>();
-    for (const t of allTransactions) {
-      const hash = `${t.date}_${t.amount}_${t.description.slice(0, 30).toLowerCase()}`;
-      if (!uniqueMap.has(hash)) {
-        uniqueMap.set(hash, t);
+    const merged = mergeStatements(results);
+    const transactions = merged.transactions;
+    onProgress?.(
+      "Applying your category rules and calculating financial metrics...",
+      70,
+    );
+    const rules = LocalFinanceDatabase.getUserRules();
+    for (const transaction of transactions) {
+      const matched = Object.keys(rules).some((pattern) =>
+        transaction.description.toLowerCase().includes(pattern),
+      );
+      if (matched) {
+        const category = categorizeTransaction(
+          transaction.description,
+          transaction.amount,
+          rules,
+        );
+        transaction.category = category.category;
+        transaction.subcategory = category.subcategory;
+        transaction.type = category.isTransfer
+          ? "transfer"
+          : transaction.amount > 0
+            ? "income"
+            : "expense";
+        transaction.confidence = category.confidence;
+        transaction.isReviewed = true;
       }
     }
-    const sanitizedTxns = [...uniqueMap.values()].sort((a, b) => a.date.localeCompare(b.date));
-
-    onProgress?.("Running financial intelligence & categorization...", 75);
-    const userRules = LocalFinanceDatabase.getUserRules();
-    const ruleEntries = Object.entries(userRules);
-    if (ruleEntries.length > 0) {
-      for (const t of sanitizedTxns) {
-        const desc = t.description.toLowerCase();
-        for (const [pattern, cat] of ruleEntries) {
-          if (desc.includes(pattern.toLowerCase())) {
-            t.category = cat;
-            break;
-          }
-        }
-      }
-    }
-    const report = buildReport(sanitizedTxns, { fileNames });
-
-    onProgress?.("Calculating health score & forecast on device...", 90);
-    // Persist verified report locally on device
-    LocalFinanceDatabase.saveActiveReport(report);
-
+    const report = insightReportSchema.parse(
+      buildReport(transactions, {
+        fileNames: files.map((file) => file.name),
+        duplicatesRemoved: merged.duplicateCount,
+        openingBalance: merged.observedOpeningBalance,
+        closingBalance: merged.observedClosingBalance,
+        goals: (await LocalFinanceDatabase.getActiveReport())?.goals,
+      }),
+    );
+    onProgress?.(
+      "Saving your verified report in private device storage...",
+      90,
+    );
+    await LocalFinanceDatabase.saveActiveReport(report);
     onProgress?.("Analysis complete!", 100);
-
-    return {
-      report,
-      transactions: sanitizedTxns,
-      isLocal: true,
-    };
-  }
-
-  private static async parseExcelLocally(file: File): Promise<Transaction[]> {
-    try {
-      const ExcelJS = await import("exceljs");
-      const workbook = new ExcelJS.Workbook();
-      const buffer = await file.arrayBuffer();
-      await workbook.xlsx.load(buffer);
-
-      const rows: string[][] = [];
-      workbook.eachSheet((sheet) => {
-        sheet.eachRow((row) => {
-          const values = Array.isArray(row.values) ? row.values.slice(1) : [];
-          rows.push(values.map((v) => String(v ?? "")));
-        });
-      });
-
-      const parsed = parseStructuredTable(rows, file.name);
-      return parsed.transactions;
-    } catch (e) {
-      console.warn("Excel parsing fallback on device:", e);
-      return [];
-    }
-  }
-
-  private static async parsePdfLocally(file: File): Promise<Transaction[]> {
-    try {
-      const buffer = await file.arrayBuffer();
-      const uint8 = new Uint8Array(buffer);
-
-      // Extract text content from raw PDF streams or text markers
-      let rawText = "";
-      const textDecoder = new TextDecoder("latin1");
-      const fullText = textDecoder.decode(uint8);
-
-      // Extract text within standard PDF text streams (between BT and ET operators)
-      const streamRegex = /BT[\s\S]*?ET/g;
-      const matches = fullText.match(streamRegex);
-
-      if (matches && matches.length > 0) {
-        for (const match of matches) {
-          // Extract strings inside parentheses (Tj or TJ)
-          const stringMatches = match.match(/\((?:\\\(|\\\)|[^()]*)\)/g);
-          if (stringMatches) {
-            const line = stringMatches
-              .map((s) => s.slice(1, -1).replace(/\\([()\\])/g, "$1"))
-              .join(" ");
-            rawText += `${line}\n`;
-          }
-        }
-      }
-
-      if (rawText.trim().length > 50) {
-        const parsed = parseGenericBankText(rawText, file.name);
-        if (parsed.transactions.length > 0) {
-          return parsed.transactions;
-        }
-      }
-
-      // If text stream is sparse or scanned, use regex across full binary text
-      const parsed = parseGenericBankText(fullText, file.name);
-      return parsed.transactions;
-    } catch (err) {
-      console.warn("Local PDF extraction encountered error:", err);
-      return [];
-    }
+    return { report, transactions, isLocal: true };
   }
 }

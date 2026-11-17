@@ -2,11 +2,15 @@ services:
   - type: web
     name: financeiq-api
     runtime: node
-    plan: free
+    plan: starter
     rootDir: render-backend
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci && npm run build
     startCommand: npm start
     healthCheckPath: /health
+    disk:
+      name: financeiq-data
+      mountPath: /var/data/financeiq
+      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
@@ -14,5 +18,9 @@ services:
         value: 10000
       - key: JWT_SECRET
         generateValue: true
+      - key: DATA_DIRECTORY
+        value: /var/data/financeiq
       - key: ALLOW_CORS_ORIGIN
-        value: "*"
+        value: "https://financeiq-iota.vercel.app,https://localhost,http://localhost,capacitor://localhost"
+      - key: TRUST_PROXY_HOPS
+        value: "1"

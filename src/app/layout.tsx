@@ -1,8 +1,17 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#000000",
+};
+
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+  ),
   title: "FinanceIQ - AI Bank Statement Analyzer & Financial Command Center",
   description:
     "Analyze PDF, CSV, and XLSX bank statements with device-powered financial intelligence, spending insights, subscriptions, forecasts, interactive charts, and exportable financial reports.",
@@ -39,4 +48,3 @@ export default function RootLayout({
     </html>
   );
 }
-
