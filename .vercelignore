@@ -1,0 +1,13 @@
+.capacitor/
+android/
+render-backend/
+scripts/browser-backend.ts
+test-results/
+playwright-report/
+dist/
+out/
+node_modules/
+.next/
+.env*
+*.keystore
+*.jks

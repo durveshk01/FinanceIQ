@@ -1,6 +1,7 @@
 # FinanceIQ 1.1.0
 
 - Bundled offline PDF, encrypted-PDF, English OCR, and XLSX assets for Android.
+- Corrected Android OCR language-file loading for the asset packager's uncompressed filename.
 - Native file/share exports, portable backup/restore, and improved ledger workflows.
 - Manual transactions, editable goals, keyboard dashboard tabs, and visible storage errors.
 - Hardened optional cloud sessions, logout, device revocation, quotas, batched persistence, and pagination.

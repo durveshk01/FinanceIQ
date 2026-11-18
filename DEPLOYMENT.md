@@ -16,6 +16,8 @@ Vercel functions impose their own request/runtime limits (including the platform
 
 Verify the production homepage, import a synthetic statement, inspect ledger totals, export/restore, and verify response security headers. Live verification is separate from local Playwright results.
 
+`.vercelignore` excludes the separately installed Express backend and its browser-test server from web uploads, alongside native artifacts and private configuration. This avoids importing backend-only dependencies during the web build while retaining their independent local/CI checks.
+
 ## Optional cloud backend
 
 `render-backend/` is an Express Node service with a single-process JSON store. It is not Supabase, PostgreSQL, or SQLite. Users, bcrypt password hashes, device records, sessions, preferences, and synchronized entities live in `DATA_DIRECTORY/financeiq.json`.
@@ -75,6 +77,12 @@ npm run test:android -- --serial emulator-5560 --release
 
 Use a **dedicated verification emulator**, not a user's device: the native script clears FinanceIQ app data, disables networking, imports test fixtures, exercises native sharing/backup/restore, and checks a cold process restart. It writes diagnostics under ignored `test-results/android/`. Physical-device/older-WebView coverage must be stated separately.
 
+Run browser/live/native verification serially in a checkout: Playwright clears the shared `test-results/` directory. Preserve diagnostics before starting another suite. Android's asset packager expands `.gz` assets and removes their suffix, so native Android OCR reads uncompressed `eng.traineddata`; web/server OCR retains gzip loading.
+
 ## GitHub release workflow
 
-`.github/workflows/android-build.yml` supports `workflow_dispatch` and matching `v<package-version>` tags. Existing private `FINANCEIQ_*` signing secrets restore the same keystore. A tag publishes the signed APK, SHA-256 file, and `RELEASE_NOTES.md`; manual runs only upload workflow artifacts. Do not call a historical APK newly verified or claim a workflow completed before inspecting its result.
+`.github/workflows/android-build.yml` supports `workflow_dispatch` and matching `v<package-version>` tags. Existing private `FINANCEIQ_*` signing secrets restore the same keystore. Signature validation fails closed unless the APK has the established single release certificate. Tag jobs are serialized; publication checks all published/draft releases for collisions, then uses create-only GitHub CLI publication with verified assets. It never clobbers an existing APK, checksum, or notes. Manual runs only upload workflow artifacts. Do not call a historical APK newly verified or claim a workflow completed before inspecting its result.
+
+The native verifier runs the full offline workflow, force-stops the app, and invokes a separate non-seeding instrumentation test. That test verifies four transaction amounts, income, expenses, closing balance, dashboard restoration, and no tracked external/API calls. It is not a complete snapshot comparison or a substitute for physical-device and uninstrumented-launch testing.
+
+The existing Android workflow also requires this verifier on a fresh `FinanceIQVerificationAPI35` AVD using the public repository's standard Ubuntu runner with KVM. Native diagnostics are retained separately even when testing fails, and publication cannot proceed past a failed native step. This provides a verification route when the local Windows emulator cannot remain booted; it does not establish Windows host stability.

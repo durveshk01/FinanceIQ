@@ -41,13 +41,18 @@ const assets = path.join(root, ".capacitor", "android-test-assets");
 const diagnostics = path.join(root, "test-results", "android");
 
 function run(command: string, argv: string[], cwd = root) {
+  if (process.env.FINANCEIQ_ANDROID_TRACE === "1")
+    console.log(`ANDROID_COMMAND: ${path.basename(command)} ${argv.join(" ")}`);
   const result = spawnSync(command, argv, {
     cwd,
     encoding: "utf8",
     maxBuffer: 8 * 1024 * 1024,
     timeout: 600000,
   });
-  if (result.error) throw result.error;
+  if (result.error)
+    throw new Error(
+      `${path.basename(command)} ${argv.join(" ")} failed: ${result.error.message}`,
+    );
   if (result.status !== 0)
     throw new Error(
       `${path.basename(command)} failed: ${result.stdout}\n${result.stderr}`,
@@ -56,6 +61,22 @@ function run(command: string, argv: string[], cwd = root) {
 }
 function device(...argv: string[]) {
   return run(adb, ["-s", serial!, ...argv]);
+}
+function instrument(method: string) {
+  return device(
+    "shell",
+    "am",
+    "instrument",
+    "-w",
+    "-r",
+    "-e",
+    "class",
+    `com.durvesh.financeiq.OfflineWorkflowTest#${method}`,
+    "-e",
+    "buildType",
+    mode,
+    "com.durvesh.financeiq.test/androidx.test.runner.AndroidJUnitRunner",
+  );
 }
 
 async function main() {
@@ -151,20 +172,7 @@ async function main() {
   device("shell", "wm", "dismiss-keyguard");
   device("logcat", "-c");
   try {
-    const output = device(
-      "shell",
-      "am",
-      "instrument",
-      "-w",
-      "-r",
-      "-e",
-      "class",
-      "com.durvesh.financeiq.OfflineWorkflowTest",
-      "-e",
-      "buildType",
-      mode,
-      "com.durvesh.financeiq.test/androidx.test.runner.AndroidJUnitRunner",
-    );
+    const output = instrument("completeOfflineWorkflow");
     await writeFile(path.join(diagnostics, "instrumentation.log"), output);
     console.log(output);
     assert.match(
@@ -173,49 +181,47 @@ async function main() {
       "Native offline workflow failed; inspect test-results/android.",
     );
     device("shell", "am", "force-stop", "com.durvesh.financeiq");
-    device(
-      "shell",
-      "am",
-      "start",
-      "-W",
-      "-n",
-      "com.durvesh.financeiq/.MainActivity",
-    );
-    let coldStart = "";
-    for (let attempt = 0; attempt < 30; attempt++) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      device(
-        "shell",
-        "uiautomator",
-        "dump",
-        "/sdcard/financeiq-cold-start.xml",
-      );
-      coldStart = device("shell", "cat", "/sdcard/financeiq-cold-start.xml");
-      if (coldStart.includes("Financial Command Center")) break;
-      device("shell", "input", "swipe", "540", "1900", "540", "600", "300");
-    }
-    await writeFile(path.join(diagnostics, "cold-start.xml"), coldStart);
-    assert.ok(
-      coldStart.includes("Financial Command Center"),
+    const coldStart = instrument("restoredReportSurvivesColdRestart");
+    await writeFile(path.join(diagnostics, "cold-start.log"), coldStart);
+    console.log(coldStart);
+    assert.match(
+      coldStart,
+      /OK \(1 test\)/,
       "The restored report did not survive a cold process restart offline.",
     );
     console.log(
       "Native cold process restart retained the restored report offline.",
     );
-  } finally {
-    await writeFile(
-      path.join(diagnostics, "logcat.log"),
-      device("logcat", "-d", "-t", "2000"),
+  } catch (error) {
+    console.error(
+      "Native workflow failure before diagnostic collection:",
+      error,
     );
+    throw error;
+  } finally {
+    try {
+      await writeFile(
+        path.join(diagnostics, "logcat.log"),
+        device("logcat", "-d", "-t", "2000"),
+      );
+    } catch {
+      console.warn("Logcat unavailable; primary workflow result retained.");
+    }
     await writeFile(
       path.join(diagnostics, "metadata.json"),
       JSON.stringify(metadata, null, 2),
     );
-    device(
-      "pull",
-      "/sdcard/Android/data/com.durvesh.financeiq/files/",
-      diagnostics,
-    );
+    try {
+      device(
+        "pull",
+        "/sdcard/Android/data/com.durvesh.financeiq/files/",
+        diagnostics,
+      );
+    } catch {
+      console.warn(
+        "Native file diagnostics unavailable; primary result and logcat retained.",
+      );
+    }
   }
 }
 main().catch((error: unknown) => {

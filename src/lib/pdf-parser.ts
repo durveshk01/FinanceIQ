@@ -7,6 +7,7 @@ import {
 } from "./bank-parsers";
 import type { TextItem } from "pdfjs-dist/types/src/display/api";
 import type { Worker } from "tesseract.js";
+import { Capacitor } from "@capacitor/core";
 import { MAX_TRANSACTIONS } from "./upload-validation";
 
 type PdfTextItem = Pick<TextItem, "str" | "transform" | "width">;
@@ -125,6 +126,8 @@ export async function readPdfStatement(
               .href,
             corePath: new URL("/ocr/", window.location.href).href,
             langPath: new URL("/ocr/", window.location.href).href,
+            // Android's asset packager expands .gz files and removes the suffix.
+            gzip: Capacitor.getPlatform() !== "android",
             workerBlobURL: false,
             cacheMethod: "none",
           });

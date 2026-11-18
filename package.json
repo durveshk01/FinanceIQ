@@ -19,7 +19,8 @@
     "test:browser": "node scripts/verify-browser.js",
     "test:browser:static": "node scripts/verify-browser.js --static",
     "test:android": "tsx scripts/verify-android.ts",
-    "test:all": "npm run test && npm run test:regression && npm run test:e2e && npm --prefix render-backend test",
+    "test:release": "tsx --test tests/release-gates.test.ts",
+    "test:all": "npm run test && npm run test:regression && npm run test:e2e && npm run test:release && npm --prefix render-backend test",
     "build:android": "node scripts/build-android.js",
     "android:signing": "node scripts/setup-android-signing.js",
     "start:backend": "npm --prefix render-backend start"

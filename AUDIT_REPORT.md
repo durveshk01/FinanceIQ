@@ -1,6 +1,6 @@
 # FinanceIQ audit and release evidence
 
-Audit date: 2026-11-17. Scope: web application, optional Express backend, financial processing, local persistence, Android, CI, source history, documentation, and deployments. All test data was synthetic. No paid infrastructure or paid AI calls were authorized or provisioned.
+Audit date: 2026-11-17; release continuation updated 2026-11-18. Scope: web application, optional Express backend, financial processing, local persistence, Android, CI, source history, documentation, and deployments. All test data was synthetic. No paid infrastructure or paid AI calls were authorized or provisioned.
 
 ## Original condition
 
@@ -10,7 +10,7 @@ The actual architecture is Next.js 16/React 19, Capacitor 8, PDF.js/Tesseract/Ex
 
 ## Issue ledger and counts
 
-Counts refer to the explicitly grouped findings below, not changed lines, test assertions, or vulnerabilities discovered by npm: **25 repaired findings, 8 remaining limitations/blockers**. Dependency audits found zero reported vulnerabilities; this is not a security certification.
+The original audit counts refer to the explicitly grouped findings below, not changed lines, test assertions, or vulnerabilities discovered by npm: **25 repaired findings, 8 remaining limitations/blockers**. Continuation findings and delivery evidence are tracked separately below. Dependency audits found zero reported vulnerabilities; this is not a security certification.
 
 | ID  | Finding                                                          | Repair and evidence                                                                                        |
 | --- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
@@ -44,20 +44,20 @@ The preserved baseline additionally contains offline native assets, native share
 
 ## Validation evidence
 
-| Check                                           | Verified result                                                                                                                             |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Clean root/backend `npm ci`                     | Passed; zero audit findings; deprecated transitive-package/install-script warnings remain                                                   |
-| Lint, typecheck, root/backend production builds | Passed again after clean installs and final regression addition                                                                             |
-| `test:all`                                      | Financial assertions, all 18 regression tests including summary-only PDF pages, ten workflow checks, backend HTTP/storage assertions passed |
-| Desktop/mobile production browser suite         | 18 passed in 55.4 seconds                                                                                                                   |
-| Desktop/mobile static client browser suite      | 16 passed, 2 server-only API tests intentionally skipped, 52.0 seconds                                                                      |
-| Formatting/whitespace                           | Formatting passed after correcting five files; `git diff --check` clean                                                                     |
-| Source/history secret scanner                   | 145 source files, 117 text files, nine commits, no findings before final additions; heuristic scanner                                       |
-| Android debug/release builds                    | Passed; release signature verified; Android lint tasks passed with warnings and upstream baseline-filtered findings                         |
-| Android JVM unit task                           | Up-to-date template `addition_isCorrect`; not meaningful application workflow coverage                                                      |
-| Android API29/WebView74 instrumentation         | Failed at dashboard startup; diagnostics show intentional WebView111+ update screen, not dashboard success                                  |
-| Newer emulator native workflow                  | Pending; must not be represented as passed                                                                                                  |
-| Live production workflows                       | Pending new deployment verification; local browser tests are not live-host evidence                                                         |
+| Check                                           | Verified result                                                                                                                                                                    |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Clean root/backend `npm ci`                     | Passed; zero audit findings; deprecated transitive-package/install-script warnings remain                                                                                          |
+| Lint, typecheck, root/backend production builds | Passed again after clean installs and final regression addition                                                                                                                    |
+| `test:all`                                      | Financial assertions, all 18 regression tests including summary-only PDF pages, ten workflow checks, backend HTTP/storage assertions passed                                        |
+| Desktop/mobile production browser suite         | Updated verifier: 18 passed in 57.5 seconds                                                                                                                                        |
+| Desktop/mobile static client browser suite      | Updated verifier: 16 passed, 2 server-only API tests intentionally skipped, 53.4 seconds                                                                                           |
+| Formatting/whitespace                           | Formatting passed after correcting five files; `git diff --check` clean                                                                                                            |
+| Source/history secret scanner                   | Continuation scan: 149 source files, 121 text files, 11 commits, no findings before final integration; heuristic scanner                                                           |
+| Android debug/release builds                    | Passed; release signature verified; Android lint tasks passed with warnings and upstream baseline-filtered findings                                                                |
+| Android JVM unit task                           | Up-to-date template `addition_isCorrect`; not meaningful application workflow coverage                                                                                             |
+| Android API29/WebView74 instrumentation         | Failed at dashboard startup; diagnostics show intentional WebView111+ update screen, not dashboard success                                                                         |
+| Newer emulator native workflow                  | Rebuilt API35 local instrumentation passed OCR, exports, erasure/backup restore; complete fresh-process verification pending CI after Windows emulator boot/disconnection failures |
+| Live production workflows                       | Updated existing Vercel alias; desktop/mobile live import, totals, coach, exports, backup/restore, reload and analyze/chat API checks passed                                       |
 
 ## Security and performance
 
@@ -73,9 +73,9 @@ No PostgreSQL/Supabase migration was necessary or performed. Client reports use 
 
 ## Android artifact and upgrade policy
 
-Release APK: 14,059,599 bytes; SHA-256 `8f7928914a8749648ebf534a477b907e29c606a0c68fdb21cfeb959f3d4cf725`. Debug APK: 16,451,525 bytes; SHA-256 `47e46574361eb6283a0c398041631f756bd51a5d67932b1761cc8fd2379303f8`.
+Rebuilt local release APK: 14,059,683 bytes; SHA-256 `5f1752a415ea7a0a4d3906a7e4a722cc89d6cfd51c9266c9b5c5bf94e77732d6`. Original audited debug APK: 16,451,525 bytes; SHA-256 `47e46574361eb6283a0c398041631f756bd51a5d67932b1761cc8fd2379303f8`. CI builds can have different APK hashes; the downloaded published artifact must match its own checksum and the established certificate.
 
-Release certificate: `CN=FinanceIQ, O=FinanceIQ`, RSA3072, SHA-256 `52a59142d5ed3d63f2de5631f2d272cf14e6b1faab9a31f07a4a2d40957f90fd`. The existing private keystore was preserved. Downloaded v1.0.0 was debug-signed with a different certificate (`a29ecb9995c3272a93e42dbb47e5a09a0d242bd377c66dac1fbd8e262bc1654a`): **back up, verify backup, uninstall/reinstall, then restore**. An in-place upgrade is not possible. GitHub signing secrets exist but their certificate has not independently been compared.
+Release certificate: `CN=FinanceIQ, O=FinanceIQ`, RSA3072, SHA-256 `52a59142d5ed3d63f2de5631f2d272cf14e6b1faab9a31f07a4a2d40957f90fd`. The existing private keystore was preserved. Downloaded v1.0.0 was debug-signed with a different certificate (`a29ecb9995c3272a93e42dbb47e5a09a0d242bd377c66dac1fbd8e262bc1654a`): **back up, verify backup, uninstall/reinstall, then restore**. An in-place upgrade is not possible. The downloaded manual CI artifact independently verifies with the same established release certificate.
 
 App ID `com.durvesh.financeiq`, version 1.1.0/code2, Android API24+ and compatible WebView111+. Build warnings include flatDir repositories, SDK XML tooling mismatch, Gradle deprecations, resource/icon advisories, and Capacitor baseline findings. These are disclosed, not silently suppressed by this audit.
 
@@ -92,10 +92,21 @@ App ID `com.durvesh.financeiq`, version 1.1.0/code2, Android API24+ and compatib
 
 ## Repository and deployment record
 
-- Repository: https://github.com/durveshk01/FinanceIQ ; source changes and report currently awaiting commit/push.
-- Existing Vercel project: `financeiq`, free Hobby scope `durvesh-s-projects1`; https://financeiq-iota.vercel.app ; new deploy pending.
+- Repository: https://github.com/durveshk01/FinanceIQ ; original audit committed/pushed as `df7a356`; isolated continuation changes awaiting final review/integration.
+- Existing Vercel project: `financeiq`, free Hobby scope `durvesh-s-projects1`; https://financeiq-iota.vercel.app ; deployment `dpl_9dLZ7Y7q9FjmvCjsgzCCSLiSPXnB` ready and live desktop/mobile verification passed at 2026-11-17T13:25:01Z.
 - APK publication: pending verified v1.1.0 release; historical releases are not newly built artifacts.
+
+## Continuation evidence
+
+The user approved an isolated worktree, source push, existing-project production deployment, and verified signed GitHub release. Paid backend infrastructure and paid AI calls remain excluded. The original checkout and its unfinished edits were preserved.
+
+- **Web deployment repaired and verified:** uploading the browser-test backend server pulled separate Express sources into Next.js typechecking without backend dependencies. `.vercelignore` now excludes the separate backend and its browser-test server. A failed deployment was inspected before the correction; the subsequent production deployment and live workflow verifier passed. Production Vercel environment inventory is empty; no provider AI is enabled.
+- **Native OCR repaired; complete CI verification pending:** Android's asset packaging expands `eng.traineddata.gz` to `eng.traineddata`. The original signed APK's ZIP inventory and native worker diagnostics confirmed the resulting 404. The PDF parser now selects uncompressed language loading specifically on Android, leaving web/server behavior unchanged. Rebuilt local instrumentation passed all four scanned pages, exports, erasure, and backup restore. Subsequent host emulator disconnection/boot failures prevented complete fresh-process verification, so the same two-method native verifier is now required in existing CI using the dedicated API35 AVD. Public standard Ubuntu runner compute is free; no paid infrastructure was added. The rebuilt local release is 14,059,683 bytes, SHA-256 `5f1752a415ea7a0a4d3906a7e4a722cc89d6cfd51c9266c9b5c5bf94e77732d6`; its established release certificate verifies. This is not yet a published artifact hash.
+- **Android CI setup repaired and signing identity verified:** manual workflow [44089788272](https://github.com/durveshk01/FinanceIQ/actions/runs/44089788272) failed because setup-android v3 requested the retired SDK `tools` package. Explicit platform-tools/API36/build-tools36 package selection replaces that default. Subsequent manual workflow [44095675682](https://github.com/durveshk01/FinanceIQ/actions/runs/44095675682) passed validations, signed build, signature verification, and static browser checks. Its downloaded APK has SHA-256 `23424c32fe1b2bd044ce5a385f3992a759f16ef00c9a5e5a8acfb08c58b5e6df`, matching its checksum file, and the established release certificate. That preflight artifact predates the OCR fix and is not the final published artifact. No signing secrets were replaced or exposed.
+- **Fresh local checks:** isolated clean installs, production/static builds, financial/backend assertions, 18 regression tests, ten workflow checks, six release-gate tests, lint, typecheck, and formatting passed. Updated production browser suite: 18 passed in 57.5 seconds; static suite: 16 passed in 53.4 seconds and two intentional server-only skips. Resumed source/history scan: 151 source files, 123 text files, 11 commits, no findings before final integration. Root/backend dependency audits reported zero vulnerabilities.
+- **Independent delivery review:** one read-only whole-branch review found no critical issue and two important inherited publication gaps. Signature checking now rejects any identity other than the established single release signer; release inventory checking rejects published/draft collisions and malformed results. Tag jobs are serialized and create-only GitHub CLI publication replaces the asset-overwriting release action. Six behavioral tests passed; a mutation check detected both disabled safeguards, and the actual previously valid debug-signed artifact was rejected by the identity gate. Full test:all, lint, typecheck, and formatting passed after the fixes. Complete report-snapshot comparison is a deferred minor; cold-restart coverage is limited to the documented financial fields.
+- **Verification tooling caveat:** concurrent browser and native suites share `test-results/`; Playwright cleanup removed native diagnostics in one attempt. That attempt was not counted as passing. Subsequent suites are run serially and live evidence preserved before browser cleanup.
 
 ## Overall health
 
-Local web/static workflows and signed builds are healthy under the verified synthetic coverage. This is **not yet a fully verified production full-stack deployment**: hosted cloud persistence, native modern-WebView workflows, updated live deployment, and release publication remain separately tracked. Passing tests are evidence of tested behavior, not proof of complete correctness or security.
+Local web/static workflows, signed builds, and the updated live web deployment are healthy under the verified synthetic coverage. This is **not a fully verified production full-stack deployment**: hosted cloud persistence, complete native modern-WebView workflows, and release publication remain separately tracked. Passing tests are evidence of tested behavior, not proof of complete correctness or security.

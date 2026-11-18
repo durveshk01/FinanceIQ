@@ -42,6 +42,21 @@ public class OfflineWorkflowTest {
     private ActivityScenario<MainActivity> scenario;
     private WebView webView;
 
+    /** Invoked separately after force-stop; never seeds or imports report data. */
+    @Test
+    public void restoredReportSurvivesColdRestart() throws Exception {
+        try {
+            launch();
+            assertStatement(readReport());
+            waitFor("document.body.textContent.includes('Financial Command Center')", 15000);
+            assertEquals("[]", eval("JSON.stringify(window.__financeNetwork)"));
+            step("Restored statement and exact balances retained after offline cold process restart");
+            screenshot("cold-restart.png");
+        } finally {
+            if (scenario != null) scenario.close();
+        }
+    }
+
     @Test
     public void completeOfflineWorkflow() throws Exception {
         try {
@@ -127,7 +142,8 @@ public class OfflineWorkflowTest {
             JSONObject archive = new JSONObject(new String(backupBytes, StandardCharsets.UTF_8));
             assertFalse(archive.getJSONObject("preferences").has("authToken"));
             assertFalse(archive.getJSONObject("preferences").has("authEmail"));
-            clickButton("Clear Local Data", false);
+            // A synchronous confirm dialog blocks evaluateJavascript callbacks.
+            tapButton("Clear Local Data");
             waitForNode("OK", 15000);
             clickNode("OK");
             waitFor("document.body.textContent.includes('No Statement Loaded')", 15000);
@@ -264,7 +280,20 @@ public class OfflineWorkflowTest {
         AccessibilityNodeInfo found = waitForNode(text, 30000);
         while (found != null && !found.isClickable()) found = found.getParent();
         assertNotNull("Android UI element is not clickable: " + text, found);
-        assertTrue(found.performAction(AccessibilityNodeInfo.ACTION_CLICK));
+        if (!found.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+            android.graphics.Rect bounds = new android.graphics.Rect();
+            found.getBoundsInScreen(bounds);
+            assertFalse("Android UI element has no touch bounds: " + text, bounds.isEmpty());
+            long now = SystemClock.uptimeMillis();
+            MotionEvent down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, bounds.centerX(), bounds.centerY(), 0);
+            MotionEvent up = MotionEvent.obtain(now, now + 80, MotionEvent.ACTION_UP, bounds.centerX(), bounds.centerY(), 0);
+            down.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+            up.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+            assertTrue(automation.injectInputEvent(down, true));
+            assertTrue(automation.injectInputEvent(up, true));
+            down.recycle();
+            up.recycle();
+        }
     }
 
     private void pressBack() {
