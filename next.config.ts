@@ -13,6 +13,19 @@ const nextConfig: NextConfig = {
     "tesseract.js",
     "@napi-rs/canvas",
   ],
+  outputFileTracingIncludes: {
+    "/api/analyze": [
+      // Worker entry points and WASM are loaded by path, outside the import graph.
+      "./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+      "./node_modules/tesseract.js/src/worker-script/**/*.js",
+      "./node_modules/tesseract.js/src/constants/imageType.js",
+      "./node_modules/tesseract.js-core/package.json",
+      "./node_modules/tesseract.js-core/tesseract-core{,-lstm,-simd,-simd-lstm,-relaxedsimd,-relaxedsimd-lstm}.{js,wasm}",
+      "./node_modules/wasm-feature-detect/package.json",
+      "./node_modules/wasm-feature-detect/dist/cjs/index.cjs",
+      "./node_modules/bmp-js/{package.json,index.js,lib/*.js}",
+    ],
+  },
   ...(isStaticExport
     ? {}
     : {

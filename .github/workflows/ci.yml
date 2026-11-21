@@ -55,6 +55,9 @@ jobs:
       - name: Verify Production Web Build
         run: npm run build
 
+      - name: Verify serverless PDF and OCR packaging
+        run: npm run test:serverless
+
       - name: Build backend
         run: npm --prefix render-backend run build
 

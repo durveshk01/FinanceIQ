@@ -16,6 +16,7 @@
     "test": "tsx src/lib/finance-engine.test.ts",
     "test:e2e": "tsx scripts/verify-e2e.ts",
     "test:regression": "tsx src/lib/regression.test.ts",
+    "test:serverless": "node scripts/verify-serverless.js",
     "test:browser": "node scripts/verify-browser.js",
     "test:browser:static": "node scripts/verify-browser.js --static",
     "test:android": "tsx scripts/verify-android.ts",
