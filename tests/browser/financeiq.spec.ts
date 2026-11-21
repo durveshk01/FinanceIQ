@@ -370,6 +370,11 @@ test("coach and simulator work locally, all tabs render and mobile layout stays 
     }));
     expect(dimensions.width).toBeLessThanOrEqual(dimensions.viewport + 1);
   }
+  for (const name of ["Income vs Expenses Overview", "Spending by Category"]) {
+    const graphic = page.getByRole("img", { name });
+    await graphic.scrollIntoViewIfNeeded();
+    await expect(graphic.locator("svg.recharts-surface")).toBeVisible();
+  }
   await page
     .getByRole("tab", { name: "Forecast & Goals", exact: true })
     .click();

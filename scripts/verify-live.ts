@@ -97,6 +97,15 @@ async function main() {
       await page
         .getByRole("heading", { name: "Financial Command Center" })
         .waitFor();
+      for (const chart of [
+        "Income vs Expenses Overview",
+        "Spending by Category",
+      ]) {
+        const graphic = page.getByRole("img", { name: chart });
+        await graphic.scrollIntoViewIfNeeded();
+        await expect(graphic.locator("svg.recharts-surface")).toBeVisible();
+      }
+      await page.evaluate(() => scrollTo(0, 0));
       assert.ok(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= innerWidth + 2,
@@ -158,6 +167,7 @@ async function main() {
           "backup/restore",
           "reload",
           "responsive",
+          "rendered-charts",
           "no-page-errors",
           "analyze/chat-APIs",
           "scanned-PDF-API",
