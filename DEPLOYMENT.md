@@ -4,6 +4,8 @@
 
 Reuse Vercel project `financeiq` in scope `durvesh-s-projects1`; do not create a duplicate project. Production alias: https://financeiq-iota.vercel.app. Build command: `npm run build`; Next.js framework; Node 24.x. The current project uses the free Hobby plan.
 
+Web builds use `tsconfig.build.json` to check the application without importing verification helpers or the optional backend. The full `npm run typecheck` remains part of CI after both projects' dependencies are installed. The package's Node range supports the tested 22 and 24 LTS lines and prevents deployment from automatically selecting an untested major version.
+
 After local validation, deploy the linked repository with the Vercel CLI:
 
 ```sh

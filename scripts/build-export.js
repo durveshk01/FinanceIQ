@@ -19,6 +19,7 @@ try {
     "next.config.ts",
     "postcss.config.mjs",
     "tsconfig.json",
+    "tsconfig.build.json",
   ]) {
     fs.copyFileSync(path.join(root, filename), path.join(staging, filename));
   }

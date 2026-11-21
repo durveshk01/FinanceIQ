@@ -34,7 +34,7 @@ Parsing is heuristic, not a guarantee for every bank layout or OCR image. Review
 
 ## Run locally
 
-Use Node >=22.13 (Node 24 tested) and npm >=10.
+Use Node 22.13+ or Node 24 LTS and npm >=10.
 
 ```sh
 npm ci

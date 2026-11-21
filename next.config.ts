@@ -5,6 +5,7 @@ const isStaticExport = process.env.STATIC_EXPORT === "true";
 const nextConfig: NextConfig = {
   output: isStaticExport ? "export" : undefined,
   outputFileTracingRoot: process.cwd(),
+  typescript: { tsconfigPath: "tsconfig.build.json" },
   serverExternalPackages: ["pdfkit", "pdf-parse", "pdfjs-dist", "tesseract.js"],
   ...(isStaticExport
     ? {}
