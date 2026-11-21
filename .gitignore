@@ -38,12 +38,11 @@ yarn-error.log*
 
 # vercel
 .vercel
+/.claude/
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-.vercel
 
 # Android Build Outputs
 *.apk

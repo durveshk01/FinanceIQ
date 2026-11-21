@@ -31,6 +31,8 @@ import {
   synchronizeCloud,
 } from "./cloud-sync";
 import { DEFAULT_PREFERENCES } from "./local-storage";
+import { roundMoney, sumMoney } from "./money";
+import { DeviceStatementProcessor } from "./device-processor";
 import { readBoundedRequest } from "./api-security";
 import {
   createPdfStatement,
@@ -84,6 +86,46 @@ test("malformed balances stay unknown and descending same-day statements reconci
   );
   assert.equal(buildReport(sameDay.transactions).balances.opening.amount, 50);
   assert.equal(buildReport(sameDay.transactions).balances.closing.amount, 140);
+});
+
+test("trailing account movements update closing balances instead of reusing an earlier observation", () => {
+  const parsed = parseStructuredTable(
+    parseCsvRows(
+      "Date,Description,Amount,Balance\n2026-04-01,Salary,100,150\n2026-04-02,Coffee,-10,",
+    ),
+  );
+  assert.equal(parsed.observedClosingBalance, undefined);
+  const report = buildReport(parsed.transactions);
+  assert.equal(report.balances.closing.amount, 140);
+  assert.equal(report.balances.closing.source, "calculated");
+  const original = fixtureReport();
+  const updated = buildReport([
+    ...original.transactions,
+    {
+      ...original.transactions[1],
+      id: "manual-later",
+      date: "2026-04-05",
+      amount: -25.5,
+      debit: 25.5,
+      credit: 0,
+      runningBalance: undefined,
+    },
+  ]);
+  assert.equal(updated.balances.closing.amount, 11554);
+  assert.equal(updated.balances.calculatedClosing.amount, 11554);
+  assert.ok(
+    !updated.alerts.some(
+      (alert) => alert.title === "Balance Reconciliation Difference",
+    ),
+  );
+});
+
+test("currency sums use the same cent rounding as individual amounts", () => {
+  assert.equal(sumMoney([1.005, 2.005]), 3.02);
+  assert.equal(sumMoney([-1.005, -2.005]), -3.02);
+  assert.equal(sumMoney([1.005, -1.005]), 0);
+  assert.equal(sumMoney([0.1, 0.2]), 0.3);
+  assert.equal(sumMoney([1.005]), roundMoney(1.005));
 });
 
 test("workbook preflight rejects decompression bombs and excessive columns", async () => {
@@ -300,6 +342,49 @@ test("overlapping statements deduplicate references without deleting repeated ca
   assert.equal(mergeStatements([]).transactions.length, 0);
 });
 
+test("overlapping same-day statements preserve bank order and boundary balances regardless of file order", () => {
+  const header = "Date,Description,Amount,Balance,Reference";
+  const early = {
+    ...parseStructuredTable(
+      parseCsvRows(
+        `${header}\n2026-04-01,Salary,100,150,A\n2026-04-01,Coffee,-10,140,B`,
+      ),
+    ),
+    observedOpeningBalance: 50,
+  };
+  const late = {
+    ...parseStructuredTable(
+      parseCsvRows(
+        `${header}\n2026-04-01,Coffee,-10,140,B\n2026-04-01,Groceries,-20,120,C`,
+      ),
+    ),
+    observedOpeningBalance: 150,
+  };
+  for (const results of [
+    [late, early],
+    [early, late],
+  ]) {
+    const merged = mergeStatements(results);
+    assert.deepEqual(
+      merged.transactions.map((transaction) => transaction.amount),
+      [100, -10, -20],
+    );
+    assert.equal(merged.duplicateCount, 1);
+    assert.equal(merged.observedOpeningBalance, 50);
+    assert.equal(merged.observedClosingBalance, 120);
+    const report = buildReport(merged.transactions, {
+      openingBalance: merged.observedOpeningBalance,
+      closingBalance: merged.observedClosingBalance,
+    });
+    assert.equal(report.balances.calculatedClosing.amount, 120);
+    assert.ok(
+      !report.alerts.some(
+        (alert) => alert.title === "Balance Reconciliation Difference",
+      ),
+    );
+  }
+});
+
 test("transfers and excluded rows affect account balances but not spending totals", () => {
   const parsed = parseStructuredTable(parseCsvRows(statementCsv));
   parsed.transactions[1].isExcluded = true;
@@ -430,6 +515,23 @@ test("PDF opening and closing summary-only pages are retained", async () => {
   assert.equal(parsed.observedClosingBalance, 11579.5);
 });
 
+test("multi-page PDFs do not present an earlier page balance as the final balance", async () => {
+  const parsed = await readServerPdfStatement(
+    new File(
+      [
+        new Uint8Array(
+          await createPdfStatement({ pages: 4, omitLastBalance: true }),
+        ),
+      ],
+      "partial-balances.pdf",
+    ),
+  );
+  assert.equal(parsed.observedClosingBalance, undefined);
+  const report = buildReport(parsed.transactions);
+  assert.equal(report.balances.closing.amount, 11579.5);
+  assert.equal(report.balances.closing.source, "calculated");
+});
+
 test("server OCR reads all scanned PDF pages using bundled English data", async () => {
   const file = new File(
     [new Uint8Array(await createPdfStatement({ pages: 4, scanned: true }))],
@@ -506,6 +608,99 @@ test("portable backups exclude credentials, validate input and retain reports af
       4,
     );
     assert.equal(LocalFinanceDatabase.getUserRules().coffee, "Food");
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, "window", descriptor);
+    else Reflect.deleteProperty(globalThis, "window");
+  }
+});
+
+test("legacy transaction backups and explicit empty reports restore the requested ledger", async () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const values = new Map<string, string>();
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      localStorage: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => values.set(key, value),
+        removeItem: (key: string) => values.delete(key),
+      },
+    },
+  });
+  try {
+    const original = fixtureReport();
+    const goals = [
+      { ...original.goals[0], id: "legacy-goal", title: "Legacy goal" },
+    ];
+    await LocalFinanceDatabase.saveActiveReport(original);
+    assert.equal(
+      await LocalFinanceDatabase.importFullBackup(
+        JSON.stringify({
+          version: 1,
+          transactions: original.transactions.slice(0, 2),
+          goals,
+        }),
+      ),
+      true,
+    );
+    assert.equal(
+      (await LocalFinanceDatabase.getActiveReport())?.transactions.length,
+      2,
+    );
+    assert.deepEqual(
+      (await LocalFinanceDatabase.getActiveReport())?.goals,
+      goals,
+    );
+    assert.equal(
+      await LocalFinanceDatabase.importFullBackup(
+        JSON.stringify({
+          version: 2,
+          report: null,
+          transactions: [],
+          goals: [],
+        }),
+      ),
+      true,
+    );
+    assert.equal(await LocalFinanceDatabase.getActiveReport(), null);
+    assert.equal(
+      await LocalFinanceDatabase.importFullBackup(
+        JSON.stringify({
+          version: 1,
+          transactions: original.transactions,
+        }),
+      ),
+      true,
+    );
+    assert.equal(
+      (await LocalFinanceDatabase.getActiveReport())?.transactions.length,
+      4,
+    );
+    assert.equal(
+      await LocalFinanceDatabase.importFullBackup(
+        JSON.stringify({
+          version: 2,
+          report: original,
+          goals,
+        }),
+      ),
+      true,
+    );
+    assert.deepEqual(
+      (await LocalFinanceDatabase.getActiveReport())?.goals,
+      goals,
+    );
+    await LocalFinanceDatabase.clearAllData();
+    assert.equal(
+      await LocalFinanceDatabase.importFullBackup(
+        JSON.stringify({ version: 1, goals }),
+      ),
+      true,
+    );
+    const imported = await DeviceStatementProcessor.processFilesLocally([
+      new File([statementCsv], "new-statement.csv"),
+    ]);
+    assert.deepEqual(imported.report.goals, goals);
   } finally {
     if (descriptor) Object.defineProperty(globalThis, "window", descriptor);
     else Reflect.deleteProperty(globalThis, "window");

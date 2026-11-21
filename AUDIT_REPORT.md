@@ -1,5 +1,7 @@
 # FinanceIQ audit and release evidence
 
+The [2026-11-21 follow-up](#follow-up-verification-2026-11-21) below supersedes the earlier pending modern-Android verification status. The original audit remains as a historical record.
+
 Audit date: 2026-11-17. Scope: web application, optional Express backend, financial processing, local persistence, Android, CI, source history, documentation, and deployments. All test data was synthetic. No paid infrastructure or paid AI calls were authorized or provisioned.
 
 ## Original condition
@@ -99,3 +101,25 @@ App ID `com.durvesh.financeiq`, version 1.1.0/code2, Android API24+ and compatib
 ## Overall health
 
 Local web/static workflows and signed builds are healthy under the verified synthetic coverage. This is **not yet a fully verified production full-stack deployment**: hosted cloud persistence, native modern-WebView workflows, updated live deployment, and release publication remain separately tracked. Passing tests are evidence of tested behavior, not proof of complete correctness or security.
+
+## Follow-up verification: 2026-11-21
+
+Follow-up fixes cover closing balances after trailing transactions, overlapping same-day statement order, cent rounding, legacy backup and goal restoration, restore notifications, chart measurement, and Windows verification cleanup. Native testing found that Android packaging strips `.gz` language-data aliases; OCR now uses the canonical `eng.traineddata` filename on web and Android. Android builds compare every packaged web asset against the static export before accepting an APK.
+
+| Check                                                               | Result                                                                                                                                               |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lint, type checking, formatting, financial engine and backend tests | Passed                                                                                                                                               |
+| Regression and workflow checks                                      | 23 regressions and 10 workflow checks passed                                                                                                         |
+| Production website browser suite                                    | 22 desktop/mobile tests passed                                                                                                                       |
+| Static Android-client browser suite                                 | 20 passed; two server-only tests intentionally skipped                                                                                               |
+| Website, backend, debug and signed release builds                   | Passed; Android lint and JVM checks passed                                                                                                           |
+| Signed Android 36 / WebView 133 offline workflow                    | Passed: system picker, CSV, encrypted PDF, XLSX, four scanned pages, navigation, local coach, all export formats, cache/data erasure, backup restore |
+| Native cold process restart with networking disabled                | Restored report retained                                                                                                                             |
+| Dependency and source/history scans                                 | Zero reported dependency vulnerabilities; no source/history scanner findings                                                                         |
+| Existing live website before this follow-up was published           | Desktop/mobile smoke passed at https://financeiq-iota.vercel.app                                                                                     |
+
+Browser output now uses `test-results/browser/` so its cleanup preserves native diagnostics in `test-results/android/`. Native verification uses real taps for blocking confirmation dialogs, preserves original failures when diagnostic evaluation is unavailable, and retries unavailable cold-start UI dumps.
+
+Release APK: `dist/android/FinanceIQ-release.apk`, 14,060,303 bytes, SHA-256 `6113d73b75d010e7b9f4348fcf345456808f5ea39589c5fc8e6180db3d761493`. Its signature verifies against the established release certificate described above. APKs and private signing files remain excluded from source commits; publishing a new APK release is separate from pushing these fixes.
+
+Physical-device coverage, old WebView compatibility, hosted cloud persistence/recovery, and real paid-AI provider calls retain the limitations described in the original audit.

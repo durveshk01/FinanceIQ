@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { gunzipSync } = require("node:zlib");
 
 const root = path.resolve(__dirname, "..");
 const publicDir = path.join(root, "public");
@@ -36,10 +37,15 @@ function prepareAssets() {
       path.join(publicDir, "ocr", `tesseract-core-${variant}.wasm.js`),
     );
   }
-  copy(
-    path.join(dataRoot, "4.0.0_best_int/eng.traineddata.gz"),
-    path.join(publicDir, "ocr/eng.traineddata.gz"),
+  // Android's asset packager strips .gz and decompresses these files. Bundle
+  // the canonical filename so browsers and native WebViews request the same URL.
+  fs.writeFileSync(
+    path.join(publicDir, "ocr/eng.traineddata"),
+    gunzipSync(
+      fs.readFileSync(path.join(dataRoot, "4.0.0_best_int/eng.traineddata.gz")),
+    ),
   );
+  fs.rmSync(path.join(publicDir, "ocr/eng.traineddata.gz"), { force: true });
   copy(
     path.join(coreRoot, "LICENSE"),
     path.join(publicDir, "ocr/LICENSE-tesseract.txt"),

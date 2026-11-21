@@ -1,0 +1,15 @@
+.capacitor/
+.claude/
+android/
+render-backend/node_modules/
+render-backend/dist/
+render-backend/data/
+test-results/
+playwright-report/
+dist/
+out/
+node_modules/
+.next/
+.env*
+*.keystore
+*.jks

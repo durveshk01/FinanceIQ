@@ -38,6 +38,7 @@ export async function createPdfStatement(
     scanned?: boolean;
     encrypted?: boolean;
     summaryPages?: boolean;
+    omitLastBalance?: boolean;
   } = {},
 ): Promise<Buffer> {
   const doc = new PDFDocument({
@@ -60,10 +61,15 @@ export async function createPdfStatement(
   }
   for (let page = 0; page < pageCount; page++) {
     if (page) doc.addPage();
-    const rows =
+    const pageRows =
       pageCount === 1
         ? statementRows
         : [statementRows[page % statementRows.length]];
+    const rows = pageRows.map((row) =>
+      options.omitLastBalance && row === statementRows.at(-1)
+        ? row.map((value, column) => (column === 4 ? "" : value))
+        : row,
+    );
     const headers = ["Date", "Description", "Debit", "Credit", "Balance"];
     if (options.scanned) {
       const { createCanvas } = await import("@napi-rs/canvas");

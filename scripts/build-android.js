@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { spawnSync } = require("node:child_process");
+const { unzipSync } = require("fflate");
 
 const root = path.resolve(__dirname, "..");
 const args = new Set(process.argv.slice(2));
@@ -35,6 +36,29 @@ function run(command, arguments_, cwd = root) {
     throw new Error(
       `Build command failed with exit code ${result.status}: ${path.basename(command)}`,
     );
+}
+
+function verifyBundledAssets(apk) {
+  const packaged = unzipSync(fs.readFileSync(apk));
+  const exportDirectory = path.join(root, "out");
+  function verify(directory) {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const source = path.join(directory, entry.name);
+      if (entry.isDirectory()) verify(source);
+      else {
+        const relative = path
+          .relative(exportDirectory, source)
+          .split(path.sep)
+          .join("/");
+        const asset = packaged[`assets/public/${relative}`];
+        if (!asset || !fs.readFileSync(source).equals(Buffer.from(asset)))
+          throw new Error(
+            `Android packaging omitted or modified ${relative}. Bundle canonical asset filenames instead of .gz aliases.`,
+          );
+      }
+    }
+  }
+  verify(exportDirectory);
 }
 
 try {
@@ -85,6 +109,7 @@ try {
       throw new Error(
         `Missing ${mode} APK. Check release signing configuration.`,
       );
+    verifyBundledAssets(source);
     const name = `FinanceIQ-${mode}.apk`;
     const destination = path.join(output, name);
     fs.copyFileSync(source, destination);

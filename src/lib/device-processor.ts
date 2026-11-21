@@ -96,13 +96,15 @@ export class DeviceStatementProcessor {
         transaction.isReviewed = true;
       }
     }
+    const previousReport = await LocalFinanceDatabase.getActiveReport();
+    const savedGoals = previousReport?.goals ?? LocalFinanceDatabase.getGoals();
     const report = insightReportSchema.parse(
       buildReport(transactions, {
         fileNames: files.map((file) => file.name),
         duplicatesRemoved: merged.duplicateCount,
         openingBalance: merged.observedOpeningBalance,
         closingBalance: merged.observedClosingBalance,
-        goals: (await LocalFinanceDatabase.getActiveReport())?.goals,
+        goals: previousReport || savedGoals.length ? savedGoals : undefined,
       }),
     );
     onProgress?.(

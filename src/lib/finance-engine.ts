@@ -272,9 +272,6 @@ export function buildReport(
   const firstBalanceIndex = verifiedTxns.findIndex(
     (t) => t.runningBalance !== undefined,
   );
-  const txnsWithBalance = verifiedTxns.filter(
-    (t) => t.runningBalance !== undefined,
-  );
   const observedOpening = metadata?.openingBalance;
   const inferredOpening =
     firstBalanceIndex >= 0
@@ -286,8 +283,7 @@ export function buildReport(
         )
       : undefined;
   const observedClosing =
-    metadata?.closingBalance ??
-    txnsWithBalance[txnsWithBalance.length - 1]?.runningBalance;
+    metadata?.closingBalance ?? verifiedTxns.at(-1)?.runningBalance;
   const openingAmount = observedOpening ?? inferredOpening ?? 0;
   // Transfers move the balance of this account even when they are excluded
   // from spending. Exclusion changes analysis, not observed bank movements.

@@ -145,6 +145,13 @@ test("manual transactions, custom goals, privacy and keyboard tabs persist witho
     .getByRole("button", { name: "Save Transaction", exact: true })
     .click();
   await expect(page.locator("tbody tr")).toHaveCount(5);
+  await page.getByRole("tab", { name: "Exports", exact: true }).click();
+  const updatedBalance = JSON.parse(
+    (await download(page, /Structured JSON Archive/)).toString(),
+  );
+  expect(updatedBalance.balances.closing.amount).toBe(11554);
+  expect(updatedBalance.balances.closing.source).toBe("calculated");
+  await page.getByRole("tab", { name: "Transactions", exact: true }).click();
   await page
     .locator("tbody tr")
     .filter({ hasText: "Manual groceries" })
@@ -172,6 +179,67 @@ test("manual transactions, custom goals, privacy and keyboard tabs persist witho
     ).isExcluded,
   ).toBe(true);
   expect(report.totals.expenses).toBe(420.5);
+  expect(report.balances.closing.amount).toBe(11554);
+});
+
+test("legacy backups replace the IndexedDB ledger and an empty backup clears it across reloads", async ({
+  page,
+}) => {
+  await importCsv(page);
+  const report = fixtureReport();
+  await page.getByLabel("Restore FinanceIQ backup").setInputFiles({
+    name: "legacy.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(
+      JSON.stringify({
+        version: 1,
+        transactions: report.transactions.slice(0, 2),
+        goals: report.goals,
+      }),
+    ),
+  });
+  await expect(
+    page.getByText("FinanceIQ backup restored successfully."),
+  ).toBeVisible();
+  await page.getByRole("tab", { name: "Transactions", exact: true }).click();
+  await expect(page.locator("tbody tr")).toHaveCount(2);
+  await page.reload();
+  await page.getByRole("tab", { name: "Transactions", exact: true }).click();
+  await expect(page.locator("tbody tr")).toHaveCount(2);
+  await page.getByLabel("Restore FinanceIQ backup").setInputFiles({
+    name: "empty.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(
+      JSON.stringify({ version: 2, report: null, transactions: [], goals: [] }),
+    ),
+  });
+  await expect(
+    page.getByRole("heading", { name: "Financial Command Center" }),
+  ).toHaveCount(0);
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Explore Verified Demo" }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("heading", { name: "Financial Command Center" }),
+  ).toHaveCount(0);
+  const goals = [
+    { ...report.goals[0], id: "legacy-goal", title: "Legacy education" },
+  ];
+  await page.getByLabel("Restore FinanceIQ backup").setInputFiles({
+    name: "goals-only.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({ version: 1, goals })),
+  });
+  await expect(
+    page.getByText("FinanceIQ backup restored successfully."),
+  ).toBeVisible();
+  await importCsv(page);
+  await page.getByRole("tab", { name: "Exports", exact: true }).click();
+  const restoredGoals = JSON.parse(
+    (await download(page, /Structured JSON Archive/)).toString(),
+  );
+  expect(restoredGoals.goals).toEqual(goals);
 });
 
 test("imports encrypted and multi-page text PDFs with correct credit/debit columns", async ({
@@ -240,11 +308,39 @@ test("recognizes all four scanned PDF pages using bundled offline OCR", async ({
   expect(externalRequests).toEqual([]);
 });
 
+test("multi-page local PDFs calculate the closing balance when the last row has no balance", async ({
+  page,
+}) => {
+  await page.getByLabel("Import bank statements").setInputFiles({
+    name: "partial-balances.pdf",
+    mimeType: "application/pdf",
+    buffer: await createPdfStatement({ pages: 4, omitLastBalance: true }),
+  });
+  await expect(
+    page.getByRole("heading", { name: "Financial Command Center" }),
+  ).toBeVisible();
+  await page.getByRole("tab", { name: "Exports", exact: true }).click();
+  const report = JSON.parse(
+    (await download(page, /Structured JSON Archive/)).toString(),
+  );
+  expect(report.transactions).toHaveLength(4);
+  expect(report.balances.closing.amount).toBe(11579.5);
+  expect(report.balances.closing.source).toBe("calculated");
+});
+
 test("coach and simulator work locally, all tabs render and mobile layout stays within viewport", async ({
   page,
 }) => {
   const fatalErrors: string[] = [];
   const apiRequests: string[] = [];
+  const chartWarnings: string[] = [];
+  page.on("console", (message) => {
+    if (
+      message.type() === "warning" &&
+      /width\(-1\)|height\(-1\)/.test(message.text())
+    )
+      chartWarnings.push(message.text());
+  });
   page.on("pageerror", (error) => fatalErrors.push(error.message));
   page.on("request", (request) => {
     if (new URL(request.url()).pathname.startsWith("/api/"))
@@ -291,6 +387,7 @@ test("coach and simulator work locally, all tabs render and mobile layout stays 
   await expect(page.getByText(/net savings totaled/)).toBeVisible();
   expect(apiRequests).toEqual([]);
   expect(fatalErrors).toEqual([]);
+  expect(chartWarnings).toEqual([]);
 });
 
 test("CSV, XLSX, PDF, JSON and portable backup exports work and can be restored after erasure", async ({

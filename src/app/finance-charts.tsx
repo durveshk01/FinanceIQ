@@ -1,5 +1,6 @@
 "use client";
 
+import { useLayoutEffect, useRef, useState, type ComponentProps } from "react";
 import {
   Area,
   AreaChart,
@@ -9,7 +10,7 @@ import {
   Cell,
   Pie,
   PieChart,
-  ResponsiveContainer,
+  ResponsiveContainer as RechartsResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -42,6 +43,52 @@ export type FinanceChartProps = {
   chartsReady: boolean;
   formatMoney: (value: number) => string;
 };
+
+function ResponsiveContainer({
+  children,
+  width,
+  height,
+}: Pick<
+  ComponentProps<typeof RechartsResponsiveContainer>,
+  "children" | "width" | "height"
+>) {
+  const container = useRef<HTMLDivElement>(null);
+  const [dimensions, setDimensions] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+  useLayoutEffect(() => {
+    const element = container.current;
+    if (!element) return;
+    const measure = () => {
+      const { width, height } = element.getBoundingClientRect();
+      if (width <= 0 || height <= 0) return false;
+      setDimensions({ width, height });
+      return true;
+    };
+    if (measure()) return;
+    const observer = new ResizeObserver(() => {
+      if (measure()) observer.disconnect();
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <div ref={container} style={{ width, height }}>
+      {dimensions ? (
+        <RechartsResponsiveContainer
+          width={width}
+          height={height}
+          initialDimension={dimensions}
+        >
+          {children}
+        </RechartsResponsiveContainer>
+      ) : (
+        <ChartSkeleton />
+      )}
+    </div>
+  );
+}
 
 // 1. Income vs Expenses Chart
 export function IncomeVsExpenseChart({

@@ -127,7 +127,7 @@ public class OfflineWorkflowTest {
             JSONObject archive = new JSONObject(new String(backupBytes, StandardCharsets.UTF_8));
             assertFalse(archive.getJSONObject("preferences").has("authToken"));
             assertFalse(archive.getJSONObject("preferences").has("authEmail"));
-            clickButton("Clear Local Data", false);
+            tapButton("Clear Local Data");
             waitForNode("OK", 15000);
             clickNode("OK");
             waitFor("document.body.textContent.includes('No Statement Loaded')", 15000);
@@ -140,11 +140,15 @@ public class OfflineWorkflowTest {
             step("Credential-free backup, native cache/data erasure, restore and no external/API calls");
             screenshot("offline-workflow.png");
         } catch (Throwable error) {
-            screenshot("offline-failure.png");
-            if (webView != null) {
-                System.out.println("NATIVE_DOM: " + eval("document.body.innerText.slice(0,7000)"));
-                System.out.println("NATIVE_WORKERS: " + eval("JSON.stringify(window.__financeWorkers||[])"));
-                System.out.println("NATIVE_ERRORS: " + eval("JSON.stringify(window.__financeErrors||[])"));
+            try {
+                screenshot("offline-failure.png");
+                if (webView != null) {
+                    System.out.println("NATIVE_DOM: " + eval("document.body.innerText.slice(0,7000)"));
+                    System.out.println("NATIVE_WORKERS: " + eval("JSON.stringify(window.__financeWorkers||[])"));
+                    System.out.println("NATIVE_ERRORS: " + eval("JSON.stringify(window.__financeErrors||[])"));
+                }
+            } catch (Throwable diagnosticError) {
+                System.out.println("Native diagnostics unavailable: " + diagnosticError.getClass().getSimpleName());
             }
             throw error;
         } finally {
@@ -264,7 +268,20 @@ public class OfflineWorkflowTest {
         AccessibilityNodeInfo found = waitForNode(text, 30000);
         while (found != null && !found.isClickable()) found = found.getParent();
         assertNotNull("Android UI element is not clickable: " + text, found);
-        assertTrue(found.performAction(AccessibilityNodeInfo.ACTION_CLICK));
+        if (!found.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+            android.graphics.Rect bounds = new android.graphics.Rect();
+            found.getBoundsInScreen(bounds);
+            assertFalse("Android UI element has no touch bounds: " + text, bounds.isEmpty());
+            long now = SystemClock.uptimeMillis();
+            MotionEvent down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, bounds.centerX(), bounds.centerY(), 0);
+            MotionEvent up = MotionEvent.obtain(now, now + 80, MotionEvent.ACTION_UP, bounds.centerX(), bounds.centerY(), 0);
+            down.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+            up.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+            assertTrue(automation.injectInputEvent(down, true));
+            assertTrue(automation.injectInputEvent(up, true));
+            down.recycle();
+            up.recycle();
+        }
     }
 
     private void pressBack() {

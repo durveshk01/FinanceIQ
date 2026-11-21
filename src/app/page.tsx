@@ -391,9 +391,10 @@ export default function Home() {
             data.error?.message || "Failed to parse bank statement.",
           );
         }
+        const savedGoals = report?.goals ?? LocalFinanceDatabase.getGoals();
         const parsedReport = insightReportSchema.parse({
           ...data.report,
-          ...(report ? { goals: report.goals } : {}),
+          ...(report || savedGoals.length ? { goals: savedGoals } : {}),
         });
         await LocalFinanceDatabase.saveActiveReport(parsedReport);
         setReport(parsedReport);
@@ -704,6 +705,21 @@ export default function Home() {
               type="button"
               onClick={() => setError(null)}
               aria-label="Dismiss error"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+        {!activeReport && exportFeedback && !error && (
+          <div
+            role="status"
+            className="fixed bottom-4 left-4 right-4 z-[60] mx-auto flex max-w-xl items-center gap-3 rounded-xl border border-emerald-500/30 bg-emerald-950 p-4 text-xs text-emerald-300"
+          >
+            <span className="flex-1">{exportFeedback}</span>
+            <button
+              type="button"
+              onClick={() => setExportFeedback(null)}
+              aria-label="Dismiss notification"
             >
               Dismiss
             </button>

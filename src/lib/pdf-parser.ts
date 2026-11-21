@@ -125,6 +125,7 @@ export async function readPdfStatement(
               .href,
             corePath: new URL("/ocr/", window.location.href).href,
             langPath: new URL("/ocr/", window.location.href).href,
+            gzip: false,
             workerBlobURL: false,
             cacheMethod: "none",
           });
@@ -187,9 +188,15 @@ export async function readPdfStatement(
       observedOpeningBalance: results.find(
         (result) => result.observedOpeningBalance !== undefined,
       )?.observedOpeningBalance,
-      observedClosingBalance: results.findLast(
-        (result) => result.observedClosingBalance !== undefined,
-      )?.observedClosingBalance,
+      observedClosingBalance:
+        results.findLast(
+          (result) =>
+            !result.transactions.length &&
+            result.observedClosingBalance !== undefined,
+        )?.observedClosingBalance ??
+        results.find(
+          (result) => result.transactions.at(-1) === transactions.at(-1),
+        )?.observedClosingBalance,
       formatDetected: "PDF Text / On-device OCR",
     };
   } catch (error) {

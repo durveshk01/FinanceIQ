@@ -461,10 +461,7 @@ export function parseStructuredTable(
   return {
     transactions,
     observedOpeningBalance: opening,
-    observedClosingBalance:
-      closing ??
-      transactions.findLast((t) => t.runningBalance !== undefined)
-        ?.runningBalance,
+    observedClosingBalance: closing ?? transactions.at(-1)?.runningBalance,
     duplicateCount,
     transferCount: transactions.filter((t) => t.type === "transfer").length,
     formatDetected: "Structured Statement (Table Profile)",
@@ -590,10 +587,7 @@ export function parseGenericBankText(
   return {
     transactions,
     observedOpeningBalance: opening,
-    observedClosingBalance:
-      closing ??
-      transactions.findLast((t) => t.runningBalance !== undefined)
-        ?.runningBalance,
+    observedClosingBalance: closing ?? transactions.at(-1)?.runningBalance,
     duplicateCount,
     transferCount: transactions.filter((t) => t.type === "transfer").length,
     formatDetected: "Text Statement (Date / Amount / Balance)",

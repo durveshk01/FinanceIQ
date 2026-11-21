@@ -184,14 +184,16 @@ async function main() {
     let coldStart = "";
     for (let attempt = 0; attempt < 30; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
-      device(
+      const dump = device(
         "shell",
         "uiautomator",
         "dump",
         "/sdcard/financeiq-cold-start.xml",
       );
-      coldStart = device("shell", "cat", "/sdcard/financeiq-cold-start.xml");
-      if (coldStart.includes("Financial Command Center")) break;
+      if (dump.includes("dumped to")) {
+        coldStart = device("shell", "cat", "/sdcard/financeiq-cold-start.xml");
+        if (coldStart.includes("Financial Command Center")) break;
+      }
       device("shell", "input", "swipe", "540", "1900", "540", "600", "300");
     }
     await writeFile(path.join(diagnostics, "cold-start.xml"), coldStart);
@@ -211,11 +213,17 @@ async function main() {
       path.join(diagnostics, "metadata.json"),
       JSON.stringify(metadata, null, 2),
     );
-    device(
-      "pull",
-      "/sdcard/Android/data/com.durvesh.financeiq/files/",
-      diagnostics,
-    );
+    try {
+      device(
+        "pull",
+        "/sdcard/Android/data/com.durvesh.financeiq/files/",
+        diagnostics,
+      );
+    } catch {
+      console.warn(
+        "Native file diagnostics unavailable; primary result and logcat retained.",
+      );
+    }
   }
 }
 main().catch((error: unknown) => {

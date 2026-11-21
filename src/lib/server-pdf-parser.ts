@@ -59,6 +59,7 @@ export async function readServerPdfStatement(
           const { createWorker } = await import("tesseract.js");
           worker = await createWorker("eng", 1, {
             langPath: path.join(process.cwd(), "public", "ocr"),
+            gzip: false,
             cacheMethod: "none",
           });
         }
@@ -118,9 +119,15 @@ export async function readServerPdfStatement(
       observedOpeningBalance: results.find(
         (result) => result.observedOpeningBalance !== undefined,
       )?.observedOpeningBalance,
-      observedClosingBalance: results.findLast(
-        (result) => result.observedClosingBalance !== undefined,
-      )?.observedClosingBalance,
+      observedClosingBalance:
+        results.findLast(
+          (result) =>
+            !result.transactions.length &&
+            result.observedClosingBalance !== undefined,
+        )?.observedClosingBalance ??
+        results.find(
+          (result) => result.transactions.at(-1) === transactions.at(-1),
+        )?.observedClosingBalance,
       formatDetected: "PDF Text / Server OCR",
     };
   } catch (error) {

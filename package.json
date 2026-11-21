@@ -12,7 +12,7 @@
     "format": "prettier --write src scripts tests render-backend/src *.json *.ts *.mjs *.md .github/workflows",
     "format:check": "prettier --check src scripts tests render-backend/src *.json *.ts *.mjs *.md .github/workflows",
     "audit:repository": "node scripts/audit-repository.js",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit --incremental false",
     "test": "tsx src/lib/finance-engine.test.ts",
     "test:e2e": "tsx scripts/verify-e2e.ts",
     "test:regression": "tsx src/lib/regression.test.ts",

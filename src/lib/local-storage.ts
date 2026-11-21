@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { buildReport } from "./finance-engine";
 import {
   financialGoalSchema,
   insightReportSchema,
@@ -222,6 +223,22 @@ export class LocalFinanceDatabase {
     return (await this.getActiveReport())?.transactions ?? [];
   }
 
+  private static async deleteActiveReport(): Promise<void> {
+    const database = await this.openDatabase();
+    if (database) {
+      await new Promise<void>((resolve, reject) => {
+        const transaction = database.transaction("records", "readwrite");
+        transaction.objectStore("records").delete(STORAGE_KEYS.ACTIVE_REPORT);
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(transaction.error);
+      });
+    }
+    const storage = this.writableStorage();
+    storage.removeItem(STORAGE_KEYS.ACTIVE_REPORT);
+    storage.removeItem(STORAGE_KEYS.SAVED_TRANSACTIONS);
+  }
+
   static getGoals(): FinancialGoal[] {
     try {
       const raw = this.storage()?.getItem(STORAGE_KEYS.GOALS);
@@ -320,18 +337,31 @@ export class LocalFinanceDatabase {
             .optional(),
           report: insightReportSchema.nullable().optional(),
           transactions: z.array(transactionSchema).max(10000).optional(),
-          goals: z.array(financialGoalSchema).optional(),
+          goals: z.array(financialGoalSchema).max(50).optional(),
           userRules: rulesSchema.optional(),
         })
         .refine(
           (backup) =>
             backup.report !== undefined ||
+            backup.transactions !== undefined ||
             backup.goals !== undefined ||
             backup.userRules !== undefined,
           "Not a FinanceIQ backup",
         );
       const backup = schema.parse(input);
-      if (backup.report) await this.saveActiveReport(backup.report);
+      let report = backup.report;
+      if (report === undefined && backup.transactions !== undefined)
+        report = buildReport(backup.transactions, { goals: backup.goals });
+      if (report === undefined && backup.goals !== undefined)
+        report = await this.getActiveReport();
+      if (report) {
+        const restored = backup.goals
+          ? { ...report, goals: backup.goals }
+          : report;
+        await this.saveActiveReport(restored);
+      } else if (backup.report === null || backup.transactions !== undefined) {
+        await this.deleteActiveReport();
+      }
       if (backup.goals) this.saveGoals(backup.goals);
       if (backup.userRules)
         this.writableStorage().setItem(

@@ -21,6 +21,8 @@ const eslintConfig = defineConfig([
     "render-backend/node_modules/**",
     ".capacitor/**",
     "dist/**",
+    "playwright-report/**",
+    "test-results/**",
     "public/pdf/**",
     "public/ocr/**",
   ]),
