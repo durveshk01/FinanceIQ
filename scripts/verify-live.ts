@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { chromium, devices, type Page } from "@playwright/test";
-import { statementCsv } from "../tests/fixtures";
+import { chromium, devices, expect, type Page } from "@playwright/test";
+import { createPdfStatement, statementCsv } from "../tests/fixtures";
 
 async function main() {
   const base = process.argv[2];
@@ -45,9 +45,9 @@ async function main() {
       assert.equal(headers["x-frame-options"], "DENY");
       assert.equal(headers["x-content-type-options"], "nosniff");
       assert.ok(!headers["content-security-policy"]?.includes("'unsafe-eval'"));
-      await page
-        .getByRole("button", { name: "Explore Verified Demo" })
-        .waitFor();
+      await expect(
+        page.getByRole("button", { name: "Explore Verified Demo" }),
+      ).toBeEnabled();
       await page.getByLabel("Import bank statements").setInputFiles({
         name: "live-synthetic.csv",
         mimeType: "text/csv",
@@ -120,6 +120,21 @@ async function main() {
       assert.equal(analyzed.headers.get("cache-control"), "no-store");
       const analysis = await analyzed.json();
       assert.equal(analysis.report.transactions.length, 4);
+      const scanned = await context.request.post(`${base}/api/analyze`, {
+        headers: { Origin: new URL(base).origin },
+        multipart: {
+          files: {
+            name: "live-synthetic-scanned.pdf",
+            mimeType: "application/pdf",
+            buffer: await createPdfStatement({ pages: 4, scanned: true }),
+          },
+        },
+        timeout: 90000,
+      });
+      assert.equal(scanned.status(), 200);
+      const scannedReport = (await scanned.json()).report;
+      assert.equal(scannedReport.transactions.length, 4);
+      assert.equal(scannedReport.balances.closing.amount, 11579.5);
       const chat = await fetch(`${base}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -145,6 +160,7 @@ async function main() {
           "responsive",
           "no-page-errors",
           "analyze/chat-APIs",
+          "scanned-PDF-API",
         ],
       });
       await context.close();

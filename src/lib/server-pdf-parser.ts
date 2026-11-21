@@ -14,6 +14,17 @@ export async function readServerPdfStatement(
   file: File,
   password?: string,
 ): Promise<ParseResult> {
+  // PDF.js needs browser geometry types in serverless Node environments.
+  // Loading canvas explicitly also makes Next.js trace its native bindings.
+  const canvas = await import("@napi-rs/canvas");
+  for (const name of ["DOMMatrix", "ImageData", "Path2D"] as const) {
+    if (typeof globalThis[name] === "undefined")
+      Object.defineProperty(globalThis, name, {
+        value: canvas[name],
+        configurable: true,
+        writable: true,
+      });
+  }
   const { PDFParse } = await import("pdf-parse");
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const bytes = await file.arrayBuffer();

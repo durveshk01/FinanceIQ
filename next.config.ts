@@ -6,7 +6,13 @@ const nextConfig: NextConfig = {
   output: isStaticExport ? "export" : undefined,
   outputFileTracingRoot: process.cwd(),
   typescript: { tsconfigPath: "tsconfig.build.json" },
-  serverExternalPackages: ["pdfkit", "pdf-parse", "pdfjs-dist", "tesseract.js"],
+  serverExternalPackages: [
+    "pdfkit",
+    "pdf-parse",
+    "pdfjs-dist",
+    "tesseract.js",
+    "@napi-rs/canvas",
+  ],
   ...(isStaticExport
     ? {}
     : {
